@@ -17,8 +17,11 @@ SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 from pptx import Presentation
-from pptx.util import Inches
+from pptx.oxml.ns import qn
+from pptx.util import Inches, Pt
 
+from build_deck import Builder
+from common import wrap_lines
 from extract_deck import para_text_marked
 import pipeline
 from qa_check import norm
@@ -79,10 +82,10 @@ class FidelityTests(unittest.TestCase):
 class ExtractionTests(unittest.TestCase):
     def test_soft_breaks_preserve_partial_and_full_bold(self):
         for left_bold, right_bold, expected in (
-                (False, False, "annual\nreport"),
-                (True, True, "annual\nreport"),
-                (True, False, "**annual**\nreport"),
-                (False, True, "annual\n**report**")):
+                (False, False, "annual\vreport"),
+                (True, True, "annual\vreport"),
+                (True, False, "**annual**\vreport"),
+                (False, True, "annual\v**report**")):
             with self.subTest(left_bold=left_bold, right_bold=right_bold):
                 prs = Presentation()
                 slide = prs.slides.add_slide(prs.slide_layouts[6])
@@ -103,7 +106,7 @@ class ExtractionTests(unittest.TestCase):
         self.assertEqual(para_text_marked(para), "annual report")
         para.clear()
         para.add_line_break()
-        self.assertEqual(para_text_marked(para), "\n")
+        self.assertEqual(para_text_marked(para), "\v")
 
     def test_extracts_soft_break_to_source_and_draft(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -121,7 +124,42 @@ class ExtractionTests(unittest.TestCase):
             for filename, key in (("source_text.json", "units"), ("deck.draft.json", "units"), ("raw.json", "shapes")):
                 with self.subTest(filename=filename):
                     data = json.loads((work / "extracted" / filename).read_text(encoding="utf-8"))
-                    self.assertEqual(data["slides"][0][key][0]["text"], "annual\nreport")
+                    self.assertEqual(data["slides"][0][key][0]["text"], "annual\vreport")
+
+
+class SoftBreakRoundTripTests(unittest.TestCase):
+    def _para(self):
+        prs = Presentation()
+        slide = prs.slides.add_slide(prs.slide_layouts[6])
+        return slide.shapes.add_textbox(Inches(1), Inches(1), Inches(4), Inches(2)).text_frame.paragraphs[0]
+
+    def test_builder_turns_vertical_tab_into_soft_break(self):
+        para = self._para()
+        runs = Builder._add_runs(para, "annual\vreport")
+        self.assertEqual([r.text for r in runs], ["annual", "report"])
+        tags = [child.tag.split("}")[1] for child in para._p if child.tag.split("}")[1] in ("r", "br")]
+        self.assertEqual(tags, ["r", "br", "r"])
+        self.assertEqual(para_text_marked(para), "annual\vreport")
+
+    def test_soft_break_inherits_run_size(self):
+        para = self._para()
+        for r in Builder._add_runs(para, "annual\vreport"):
+            r.font.size = Pt(28)
+        Builder._sync_breaks(para)
+        br = para._p.find(qn("a:br"))
+        self.assertEqual(br.find(qn("a:rPr")).get("sz"), "2800")
+
+    def test_paragraph_break_stays_separate_from_soft_break(self):
+        prs = Presentation()
+        slide = prs.slides.add_slide(prs.slide_layouts[6])
+        tf = slide.shapes.add_textbox(Inches(1), Inches(1), Inches(4), Inches(2)).text_frame
+        Builder._add_runs(tf.paragraphs[0], "one\vtwo")
+        Builder._add_runs(tf.add_paragraph(), "three")
+        self.assertEqual("\n".join(para_text_marked(p) for p in tf.paragraphs), "one\vtwo\nthree")
+        self.assertEqual(norm("one\vtwo\nthree"), "onetwothree")
+
+    def test_wrap_counts_soft_break_as_new_line(self):
+        self.assertEqual(len(wrap_lines("a\vb", 20, 500)), 2)
 
 
 class PipelineTests(unittest.TestCase):

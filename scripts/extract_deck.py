@@ -56,14 +56,18 @@ def run_info(run):
 
 
 def para_text_marked(p):
-    """Paragraph text with soft breaks and **bold** markers for partially-bold runs."""
+    """Paragraph text with **bold** markers for partially-bold runs.
+
+    Soft line breaks (<a:br>, Shift+Enter) come out as "\v", the same convention
+    python-pptx uses, so they stay distinct from the "\n" that joins paragraphs.
+    """
     runs = [r for r in p.runs if r.text]
     if not runs:
-        return p.text.replace("\v", "\n") if hasattr(p, "text") else ""
+        return p.text if hasattr(p, "text") else ""
     all_bold = all(r.font.bold for r in runs)
     marked = {r._r: f"**{r.text}**" if not all_bold and r.font.bold and r.text.strip() else r.text
               for r in runs}
-    out = "".join("\n" if child.tag == qn("a:br") else marked.get(child, "") for child in p._p)
+    out = "".join("\v" if child.tag == qn("a:br") else marked.get(child, "") for child in p._p)
     return out.replace("****", "")
 
 

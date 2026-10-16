@@ -10,6 +10,7 @@ only backgrounds, illustrations, icons and brush strokes are pictures.
 Also writes out/layout_dump.json (every element) for qa_check.py.
 """
 import argparse
+import copy
 import re
 import sys
 from pathlib import Path
@@ -124,13 +125,13 @@ class Builder:
                 if not seg:
                     continue
                 emph = seg.startswith("**") and seg.endswith("**") and len(seg) > 4
-                r = p.add_run()
-                r.text = seg[2:-2] if emph else seg
-                self._font(r, e.get("font", "body"), e["size"], True if emph else base_bold,
-                           emph_color if emph else color,
-                           serif=emph and self.S.decor.get("emphasis") == "serif" and e.get("font") in ("heading", "display"))
-                if e.get("spc"):
-                    r._r.get_or_add_rPr().set("spc", str(int(e["spc"] * 100)))
+                for r in self._add_runs(p, seg[2:-2] if emph else seg):
+                    self._font(r, e.get("font", "body"), e["size"], True if emph else base_bold,
+                               emph_color if emph else color,
+                               serif=emph and self.S.decor.get("emphasis") == "serif" and e.get("font") in ("heading", "display"))
+                    if e.get("spc"):
+                        r._r.get_or_add_rPr().set("spc", str(int(e["spc"] * 100)))
+            self._sync_breaks(p)
         return tb
 
     def rect(self, slide, e, oval=False):
@@ -225,6 +226,31 @@ class Builder:
             tail.set("len", "med")
         return c
 
+    @staticmethod
+    def _add_runs(p, text):
+        """Add text to paragraph p as runs; each "\v" becomes a soft line break (<a:br>)."""
+        runs = []
+        for i, part in enumerate(text.split("\v")):
+            if i:
+                p.add_line_break()
+            if part:
+                r = p.add_run()
+                r.text = part
+                runs.append(r)
+        return runs
+
+    @staticmethod
+    def _sync_breaks(p):
+        """Give each <a:br> the run properties of the run before it, so the line keeps its height."""
+        prev = None
+        for child in p._p:
+            if child.tag == qn("a:r"):
+                prev = child.find(qn("a:rPr"))
+            elif child.tag == qn("a:br") and prev is not None:
+                for old in child.findall(qn("a:rPr")):
+                    child.remove(old)
+                child.insert(0, copy.deepcopy(prev))
+
     def _cell_text(self, cell, text, size, color, bold, align="l"):
         tf = cell.text_frame
         tf.word_wrap = True
@@ -237,9 +263,9 @@ class Builder:
             if not seg:
                 continue
             emph = seg.startswith("**") and seg.endswith("**") and len(seg) > 4
-            r = p.add_run()
-            r.text = seg[2:-2] if emph else seg
-            self._font(r, "body", size, bold or emph, color)
+            for r in self._add_runs(p, seg[2:-2] if emph else seg):
+                self._font(r, "body", size, bold or emph, color)
+        self._sync_breaks(p)
 
     def table(self, slide, e):
         rows, cols = len(e["rows"]) + 1, len(e["columns"])
