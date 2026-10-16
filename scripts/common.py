@@ -335,7 +335,7 @@ def text_width_pt(text, size_pt, bold=False, latin_scale=1.0):
 def wrap_lines(text, size_pt, box_w_pt, bold=False, latin_scale=1.0):
     """Greedy CJK-aware wrap. Returns list of lines."""
     lines = []
-    for para in strip_marks(text).split("\n"):
+    for para in re.split(r"[\n\v]", strip_marks(text)):
         if not para:
             lines.append("")
             continue
