@@ -65,7 +65,8 @@ def main():
     elif not rendered:
         print("NOTE 没有生成预览图，视觉检查只能跳过，pptx 已正常生成")
     print("\nQA", "has ERRORS, fix before delivering" if rc else "passed (review WARN lines)")
+    return rc
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

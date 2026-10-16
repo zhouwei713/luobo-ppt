@@ -29,8 +29,8 @@ from pptx import Presentation  # noqa: E402
 
 
 def norm(s):
-    # leading bullet glyphs ("· ", "• ") are decoration that icons or dashes replace; ignore them
-    s = re.sub(r"(?m)^\s*[·•●▪◦\-–*]\s*", "", (s or "").replace("**", ""))
+    # Ignore list markers, but require space after a dash to preserve negative numbers.
+    s = re.sub(r"(?m)^[^\S\r\n]*(?:[·•●▪◦*][^\S\r\n]*|[\-–][^\S\r\n]+)", "", (s or "").replace("**", ""))
     s = re.sub(r"\s+", "", s)
     return s.replace("“", "\"").replace("”", "\"")
 

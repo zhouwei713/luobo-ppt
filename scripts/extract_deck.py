@@ -23,6 +23,7 @@ from common import normalize_pptx, save_json  # noqa: E402
 
 from pptx import Presentation  # noqa: E402
 from pptx.enum.shapes import MSO_SHAPE_TYPE  # noqa: E402
+from pptx.oxml.ns import qn  # noqa: E402
 from pptx.util import Emu  # noqa: E402
 
 EMU_IN = 914400
@@ -55,16 +56,14 @@ def run_info(run):
 
 
 def para_text_marked(p):
-    """Paragraph text with **bold** markers for partially-bold runs."""
+    """Paragraph text with soft breaks and **bold** markers for partially-bold runs."""
     runs = [r for r in p.runs if r.text]
     if not runs:
-        return p.text if hasattr(p, "text") else ""
+        return p.text.replace("\v", "\n") if hasattr(p, "text") else ""
     all_bold = all(r.font.bold for r in runs)
-    if all_bold:
-        return "".join(r.text for r in runs)
-    out = ""
-    for r in runs:
-        out += f"**{r.text}**" if r.font.bold and r.text.strip() else r.text
+    marked = {r._r: f"**{r.text}**" if not all_bold and r.font.bold and r.text.strip() else r.text
+              for r in runs}
+    out = "".join("\n" if child.tag == qn("a:br") else marked.get(child, "") for child in p._p)
     return out.replace("****", "")
 
 
