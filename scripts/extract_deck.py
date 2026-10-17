@@ -7,7 +7,8 @@ Usage:
 Writes into WORK_DIR:
   source.pptx          normalized copy (fixes zips LibreOffice cannot open)
   raw.json             every shape: position (inches), fill, text runs, pictures, notes
-  source_text.json     every text unit per slide (used by qa_check for fidelity)
+  source_text.json     every text unit per slide (used by qa_check for fidelity), and every chart
+                       read out with its data, number format and axis titles
   deck.draft.json      first guess of the semantic deck; Claude edits it into deck.json
   media/               pictures from the deck (svg kept as svg, text inside svg listed)
   source_png/          one PNG per slide + sheet.png (unless --no-render)
@@ -127,6 +128,14 @@ def walk(shapes, out, media_dir, slide_n, counter):
         if getattr(sh, "has_table", False) and sh.has_table:
             rows = [[c.text for c in r.cells] for r in sh.table.rows]
             out.append(dict(base, kind="table", rows=rows))
+            continue
+        if getattr(sh, "has_chart", False) and sh.has_chart:
+            # data, units and axis titles are checked on their own (qa_check, chart and fine print)
+            from chartcheck import read_chart
+            try:
+                out.append(dict(base, kind="chart", chart=read_chart(sh.chart)))
+            except Exception as e:  # noqa: BLE001
+                out.append(dict(base, kind="chart", chart=None, error=str(e)[:200]))
             continue
         item = dict(base, kind="shape", fill=fill_hex(sh))
         if getattr(sh, "is_placeholder", False):
@@ -270,7 +279,8 @@ def main():
                     for c in r:
                         if c.strip():
                             units_src.append({"id": p["id"] + "_cell", "text": c})
-        source_text["slides"].append({"n": n, "units": units_src})
+        charts = [p["chart"] for p in shapes if p["kind"] == "chart" and p.get("chart")]
+        source_text["slides"].append({"n": n, "units": units_src, "charts": charts})
 
         top_sizes = [t.get("size") or 0 for t in texts if t["y"] < sh_ * 0.25]
         max_top = max(top_sizes) if top_sizes else 0
@@ -288,8 +298,16 @@ def main():
                  "x": p["x"], "y": p["y"], "w": p["w"], "h": p["h"]}
                 for p in shapes if p["kind"] == "picture"]
         title = next((u["text"] for u in units if u["role"] == "title"), "")
-        draft["slides"].append({"n": n, "type": guess_type(n, total, bg, units), "title": title,
-                                "notes": notes, "units": units, "pictures": pics})
+        d_slide = {"n": n, "type": guess_type(n, total, bg, units), "title": title,
+                   "notes": notes, "units": units, "pictures": pics}
+        if charts:
+            from chartcheck import draft_spec
+            # a ready chart spec: copy it into deck.json as-is (type "chart"), keeping number_format,
+            # title and axis titles, or the labels lose their unit
+            d_slide["charts"] = [draft_spec(c) for c in charts]
+            if len(charts) == 1 and d_slide["type"] == "content":
+                d_slide["type"] = "chart"
+        draft["slides"].append(d_slide)
         for u in units:
             if u["role"] == "footer" and not draft["meta"]["footer"]:
                 draft["meta"]["footer"] = u["text"]

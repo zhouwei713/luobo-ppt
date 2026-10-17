@@ -15,6 +15,11 @@ Checks
   contrast   text vs what is under it below WCAG thresholds = WARN
   tiny       font below 10pt = WARN
   animation  a build pointing at a missing shape = ERROR; more than 6 clicks on one page = WARN
+  chart      every chart of the original (or of deck.json) is on the slide with the same categories,
+             series names and values; numbers read the same (35% stays 35%, not 35); chart and
+             axis titles appear on the chart or the slide = ERROR otherwise
+  fine-print notes, sources, unit lines and footnote marks (*, ※, ¹) kept exactly, marks included
+             = ERROR otherwise. Both are listed side by side in out/fine_print.md
 Writes WORK_DIR/out/qa_report.json. Exit code 1 when any ERROR.
 """
 import argparse
@@ -158,6 +163,64 @@ def main():
             tn = norm(t)
             if tn and tn not in allsrc:
                 add("INFO", n, "added", f"added text: {t[:40]!r}")
+
+    # ---------------- charts and fine print: the body text can be right while a unit, an axis
+    # title, a series name or a footnote mark has changed the meaning. Checked on their own,
+    # and listed side by side in out/fine_print.md for a last look before delivery.
+    import chartcheck as CC
+    fp = ["# 图表和小字对照", "",
+          "正文逐字核对之外，单位、坐标轴、系列名、注释和来源单独对一遍。左边是原稿（生成时是 deck.json），右边是成品。", ""]
+    for i, ss in enumerate(src["slides"]):
+        if i >= len(prs.slides):
+            break
+        n = ss["n"]
+        slide = prs.slides[i]
+        text_blob = "".join(out_units[i])
+        if gen_mode:
+            dsl = deck["slides"][i] if i < len(deck["slides"]) else {}
+            refs = [CC.from_spec(dsl["chart"])] if dsl.get("chart") else []
+            units_all = ss["units"]
+        else:
+            refs = [c for c in ss.get("charts", []) if c]
+            units_all = ss["units"]
+        outs = CC.charts_on_slide(slide)
+        section = []
+        if len(outs) < len(refs):
+            add("ERROR", n, "chart", f"原稿有 {len(refs)} 个图表，成品只有 {len(outs)} 个；图表要写成 chart 页型，"
+                                     "数据从 deck.draft.json 的 charts 里照抄")
+        left = list(outs)
+        for k, ref in enumerate(refs):
+            if not left:
+                break
+            best = max(left, key=lambda o: len(set(o["categories"]) & set(ref["categories"])))
+            left.remove(best)
+            probs, rows = CC.compare(ref, best, text_blob)
+            for lvl, msg in probs:
+                add(lvl, n, "chart", msg)
+            section.append(f"图表 {k + 1}" + ("，有问题" if probs else "，一致"))
+            section.append("")
+            section.append("| 项目 | 原稿 | 成品 |")
+            section.append("|---|---|---|")
+            section += [f"| {a} | {b} | {c} |" for a, b, c in rows]
+            section.append("")
+        smalls = CC.fine_print_units(units_all)
+        sblob = CC.strict(text_blob)
+        for u in smalls:
+            ok = CC.strict(u["text"]) in sblob
+            if not ok and norm(u["text"]) in norm(text_blob):
+                add("ERROR", n, "fine-print", f"小字被改了（注释符号、星号或括号没带过来）：{u['text'][:50]!r}")
+        if smalls:
+            section.append("| 小字 | 成品里 |")
+            section.append("|---|---|")
+            for u in smalls:
+                ok = CC.strict(u["text"]) in sblob
+                section.append(f"| {u['text'][:80].replace('|', '/')} | {'原样' if ok else '变了或缺了'} |")
+            section.append("")
+        if section:
+            fp += [f"## 第 {n} 页", ""] + section
+    if len(fp) == 4:
+        fp.append("这份稿子没有图表，也没有注释、来源、单位这类小字。")
+    (pptx.parent / "fine_print.md").write_text("\n".join(fp) + "\n", encoding="utf-8")
 
     # ---------------- geometry
     for sd in dump["slides"]:
