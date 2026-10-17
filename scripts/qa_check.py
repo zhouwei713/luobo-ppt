@@ -178,7 +178,7 @@ def main():
         text_blob = "".join(out_units[i])
         if gen_mode:
             dsl = deck["slides"][i] if i < len(deck["slides"]) else {}
-            refs = [CC.from_spec(dsl["chart"])] if dsl.get("chart") else []
+            refs = [CC.from_spec(c) for c in CC.spec_charts(dsl)]
             units_all = ss["units"]
         else:
             refs = [c for c in ss.get("charts", []) if c]
@@ -192,7 +192,9 @@ def main():
         for k, ref in enumerate(refs):
             if not left:
                 break
-            best = max(left, key=lambda o: len(set(o["categories"]) & set(ref["categories"])))
+            # pair by shared categories, then by type, then by drawing order
+            best = max(left, key=lambda o: (len(set(o["categories"]) & set(ref["categories"])),
+                                            o.get("type") == ref.get("type"), -left.index(o)))
             left.remove(best)
             probs, rows = CC.compare(ref, best, text_blob)
             for lvl, msg in probs:

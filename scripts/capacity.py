@@ -137,17 +137,31 @@ def check(slide, layout):
             out.append(f"{len(long_cells)} 个单元格超过 {_m(t['cell'])} 字")
     if "chart" in cap:
         c = cap["chart"]
-        spec = slide.get("chart") or {}
-        cats, ser = spec.get("categories", []), spec.get("series", [])
-        if not (c["categories"][0] <= len(cats) <= c["categories"][1]):
-            out.append(f"图表 {len(cats)} 个分类，需要 {c['categories'][0]} 到 {c['categories'][1]} 个")
-        if not (c["series"][0] <= len(ser) <= c["series"][1]):
-            out.append(f"图表 {len(ser)} 组数据，需要 {c['series'][0]} 到 {c['series'][1]} 组")
-        for sr in ser:
-            if len(sr.get("values", [])) != len(cats):
-                out.append(f"数据组 {sr.get('name', '')} 的数值个数和分类个数不一致")
-        if spec.get("type") in ("pie", "doughnut") and len(ser) > 1:
-            out.append("饼图和环形图只能有一组数据")
+        specs = slide.get("charts") or [slide.get("chart") or {}]
+        if len(specs) > 3:
+            out.append(f"一页 {len(specs)} 个图表，最多 3 个，多了就拆页")
+        for k, spec in enumerate(specs):
+            tag = f"第 {k + 1} 个图表" if len(specs) > 1 else "图表"
+            spec = spec or {}
+            cats, ser = spec.get("categories", []), spec.get("series", [])
+            if not (c["series"][0] <= len(ser) <= c["series"][1]):
+                out.append(f"{tag} {len(ser)} 组数据，需要 {c['series'][0]} 到 {c['series'][1]} 组")
+            if spec.get("type") == "scatter":
+                # a scatter chart has no categories: each series carries its own x values
+                for sr in ser:
+                    xs, ys = sr.get("x", []), sr.get("values", [])
+                    if len(xs) != len(ys):
+                        out.append(f"{tag}的数据组 {sr.get('name', '')} x 和 values 个数不一致")
+                    if not (2 <= len(ys) <= 60):
+                        out.append(f"{tag}的数据组 {sr.get('name', '')} 有 {len(ys)} 个点，需要 2 到 60 个")
+                continue
+            if not (c["categories"][0] <= len(cats) <= c["categories"][1]):
+                out.append(f"{tag} {len(cats)} 个分类，需要 {c['categories'][0]} 到 {c['categories'][1]} 个")
+            for sr in ser:
+                if len(sr.get("values", [])) != len(cats):
+                    out.append(f"{tag}的数据组 {sr.get('name', '')} 的数值个数和分类个数不一致")
+            if spec.get("type") in ("pie", "doughnut") and len(ser) > 1:
+                out.append("饼图和环形图只能有一组数据")
     if "framework" in cap:
         fw = slide.get("framework") or {}
         kind = fw.get("kind")
@@ -181,7 +195,7 @@ def summary(layout):
         t = cap["table"]
         parts.append(f"{t['columns'][0]}-{t['columns'][1]} 列，{t['rows'][0]}-{t['rows'][1]} 行，单元格≤{t['cell']}")
     if "chart" in cap:
-        parts.append("分类 2-8 个，数据 1-3 组，结论≤3 条")
+        parts.append("分类 2-8 个（散点图不限分类），数据 1-3 组，一页最多 3 个图表，结论≤3 条")
     if "framework" in cap:
         parts.append("每格≤4 条、每条≤16 字（画布每格≤3 条、每条≤14 字）")
     fl = "，".join(f"{k}≤{v}" for k, v in cap.get("fields", {}).items())
