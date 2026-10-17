@@ -20,12 +20,13 @@
 
 | 字段 | 说明 |
 |---|---|
-| `provider` | `openai`、`gemini`、`ark`、`openai_compatible`、`command`、`none` |
+| `provider` | `openai`、`gemini`、`ark`、`hiapi`、`openai_compatible`、`command`、`none` |
 | `api_key_env` | 存放 key 的环境变量名（推荐，key 不落盘） |
 | `api_key` | 直接写 key（不推荐，别把文件分享出去） |
 | `model` | 模型名，不填用默认 |
 | `base_url` | 接口地址，不填用官方默认 |
 | `quality` | 仅 openai gpt-image，`low` / `medium` / `high` |
+| `resolution` | 仅 hiapi，`1K` / `2K` / `4K`，默认 `1K` |
 | `size` | 强制尺寸，一般不用填 |
 | `use_for` | `{"hero": true, "background": false}`，默认只用 AI 画插画，背景走程序化（更干净、不抢字） |
 | `max_parallel` | 并发数，默认 3 |
@@ -51,6 +52,14 @@ Google Gemini
 ```json
 {"provider": "ark", "api_key_env": "ARK_API_KEY", "model": "doubao-seedream-4-0-250828"}
 ```
+
+HiAPI（异步任务接口，先提交任务再轮询结果，一张图大约一到两分钟，脚本默认三张并行）
+
+```json
+{"provider": "hiapi", "api_key_env": "HIAPI_API_KEY", "model": "gpt-image-2.5-flare/text-to-image", "resolution": "1K"}
+```
+
+`resolution` 可选 `1K`、`2K`、`4K`。透明底只有 `1K` 支持，插画默认需要透明底，所以保持 `1K`；2K、4K 出的是白底图，脚本会自动去白底。也可以只用环境变量：`LUOBO_PPT_PROVIDER=hiapi` 加 `HIAPI_API_KEY`。
 
 其他兼容 OpenAI 图片接口的服务（中转站、自建服务等）
 

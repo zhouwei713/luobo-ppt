@@ -81,7 +81,7 @@ description: 做 PPT 和美化 PPT 的一站式 skill，输出可编辑的原生
 
 需要配图但没有生图模型时，先问用户选哪种，不要自己默认。一次问清，四个选项：
 
-1. **现在接入生图模型**：按 `references/imagegen_config.md` 帮用户配好（OpenAI、Gemini、即梦/Seedream 或兼容接口），`make_assets.py $W --status` 确认生效后照常出图。
+1. **现在接入生图模型**：按 `references/imagegen_config.md` 帮用户配好（OpenAI、Gemini、即梦/Seedream、HiAPI 或兼容接口）。用户在聊天里给 key 时只放进环境变量，不写进任何文件，提醒他用完作废，`make_assets.py $W --status` 确认生效后照常出图。
 2. **搜公开图库的实拍图**：适合讲具体东西的稿子，比如门店、产品、城市、食物、活动现场。抽象概念（效率、增长、底层逻辑）搜出来大多是俗套图，这类页继续用插画。
 3. **用自己的素材**：用户给图片文件或文件夹，按页对应放进去。
 4. **用程序化插画**：不联网、不花钱，风格统一。
