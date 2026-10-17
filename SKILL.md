@@ -1,6 +1,6 @@
 ---
 name: luobo-ppt
-description: 做 PPT 和美化 PPT 的一站式 skill，输出可编辑的原生 .pptx。从零生成时，给一个题目、一篇文章或口播稿、一份大纲，产出结论式标题、带口播备注、风格统一的 PPT；按参考图美化时，给一份朴素的 .pptx 和一张参考图，文字一字不改地换上统一的配色、母版、版式、图标和插画。当用户说"做个PPT""把这篇文章做成PPT""生成口播PPT""美化PPT""照这张图的风格改PPT""套个风格""make slides""beautify my deck"，或丢来 pptx、文章、大纲时，务必使用此skill。生图模型可配置，没配置时自动用程序化插画兜底。
+description: 做 PPT 和美化 PPT 的一站式 skill，输出可编辑的原生 .pptx。从零生成时，给一个题目、一篇文章或口播稿、一份大纲，产出结论式标题、带口播备注、风格统一的 PPT；按参考图美化时，给一份朴素的 .pptx 和一张参考图，文字一字不改地换上统一的配色、母版、版式、图标和插画。当用户说"做个PPT""把这篇文章做成PPT""生成口播PPT""美化PPT""照这张图的风格改PPT""套个风格""make slides""beautify my deck"，或丢来 pptx、文章、大纲时，务必使用此skill。生图模型可配置；没配置时先问用户，可以现场接入模型、搜可商用的公开图库实拍图、用自己的素材，或用程序化插画。口播和讲课的稿子自带逐条出现的动画。
 ---
 
 # 萝卜 PPT（luobo-ppt）
@@ -27,7 +27,7 @@ description: 做 PPT 和美化 PPT 的一站式 skill，输出可编辑的原生
    ```bash
    python3 $S/setup_check.py --quick --install
    ```
-3. **生图状态** `python3 $S/make_assets.py $W --status`，用一句话告诉用户接了哪家模型，或者走程序化插画。配置方法见 `references/imagegen_config.md`。
+3. **生图状态** `python3 $S/make_assets.py $W --status`，用一句话告诉用户接了哪家模型。没有模型时先别默认走程序化插画，等版式规划出来、确实需要配图时按下面的"配图来源"问用户。配置方法见 `references/imagegen_config.md`。
 4. **一次提问**问清路线需要的选择，其余用默认值。用户说"直接做""不用问"或者不在场时，全部用默认值，交付时列出做过的选择。
 5. **快速模式**：用户说"快速模式""别问了""赶时间"时，跳过风格卡、大纲、设计规格的确认，五维自评只修一轮"要修"，"顺手改"写进交付说明不动手。12 页左右的稿子，正常 15 到 25 分钟，快速模式 10 分钟上下；时间大头在转写文字和看图，脚本本身只要一两分钟。
    - 美化：力度 light / standard / full（默认 full），是否允许精修文字（默认不允许）
@@ -57,6 +57,7 @@ description: 做 PPT 和美化 PPT 的一站式 skill，输出可编辑的原生
    重跑时内容没变的页会保留原来的规划（包括手改过的版式和插画提示词），要全部重排加 `--reset`。
    审 plan.json：版式贴不贴内容（`references/layouts.md`）、图标达不达意（`references/icons.md`）、插画提示词具不具体（`references/image_prompts.md`）。内容超出版式容量时脚本会自动换版式，并写进 design_spec.md 的"容量提醒"，出图前先处理掉。
    把生成的 design_spec.md 发给用户确认后再出图，出图最花钱。快速模式跳过确认。
+   没有生图模型时再跑一次 `make_assets.py $W --status`，输出里有 `ASK` 就按"配图来源"问用户，和设计规格放在同一次确认里问。
 2. **出图、组装、自检**一条命令：
    ```bash
    python3 $S/pipeline.py $W
@@ -76,12 +77,42 @@ description: 做 PPT 和美化 PPT 的一站式 skill，输出可编辑的原生
 
 3. **五维自评**：看 `out/sheet.png` 和逐页 PNG，对照 `out/review.md` 里脚本数出的证据，按 `references/critique.md` 给统一、层级、细节、传达、节奏各打 0 到 10 分，写出保留、要修、顺手改三张清单。"要修"的交付前改掉，改完只重跑受影响的步骤，最多三轮。
 
+## 配图来源
+
+需要配图但没有生图模型时，先问用户选哪种，不要自己默认。一次问清，四个选项：
+
+1. **现在接入生图模型**：按 `references/imagegen_config.md` 帮用户配好（OpenAI、Gemini、即梦/Seedream 或兼容接口），`make_assets.py $W --status` 确认生效后照常出图。
+2. **搜公开图库的实拍图**：适合讲具体东西的稿子，比如门店、产品、城市、食物、活动现场。抽象概念（效率、增长、底层逻辑）搜出来大多是俗套图，这类页继续用插画。
+3. **用自己的素材**：用户给图片文件或文件夹，按页对应放进去。
+4. **用程序化插画**：不联网、不花钱，风格统一。
+
+用户不在场、说了"直接做"或快速模式时选 4，交付时说明可以换成实拍图或接入模型。几种可以混用，比如封面用自己的照片，其余页用插画。
+
+实拍图和用户素材都用 `photo_assets.py`：
+
+```bash
+python3 $S/photo_assets.py sources                         # 现在能用哪些图库
+python3 $S/photo_assets.py search $W hero_01 "coffee shop interior"   # 关键词用英文、写具体名词
+python3 $S/photo_assets.py pick   $W hero_01 3             # 看 photos/hero_01/sheet.png 挑一张
+python3 $S/photo_assets.py local  $W hero_01 用户的图.jpg   # 用户自己的图
+python3 $S/photo_assets.py drop   $W hero_01               # 退回插画
+```
+
+- 搜图前先看 plan.json 里哪些图位值得放照片：封面、章节页、结尾页和图文页的大图位最合适；内容页右上角的小装饰位放照片偏挤，脚本会提醒，这类页继续用插画
+- 候选图先看 `sheet.png` 再挑，挑和这一页内容真正相关、画面干净、没有水印和大段文字的；都不合适就换关键词或退回插画，宁缺毋滥
+- 照片会按图位裁切、圆角、加柔和投影；想让照片和配色更统一加 `--tint 0.12`；主体被裁掉就用 `--focus X Y` 调保留位置
+- 只收可商用、可修改的图：CC0、公有领域、CC BY、CC BY-SA，以及 Pexels、Unsplash、Pixabay 自家协议（这三家要用户在环境变量里配免费 key，见 `references/imagegen_config.md`）
+- CC BY 和 CC BY-SA 必须署名：脚本会打出 `CREDIT` 行。生成模式把它加到该页 `notes` 末尾；美化模式不改备注，把 `out/image_credits.md` 交给用户自己决定放哪
+- 输出 `NO_NETWORK` 说明图库连不上（网络受限），告诉用户，改用他的素材或程序化插画
+- 选好的照片和用户素材之后重跑 `make_assets.py`（包括 `--force`）都会保留，除非在 `--only` 里点名
+
 ## 交付
 
 - `out/beautified.pptx`，文件名用 `原名_美化版.pptx` 或 `主题.pptx`
 - 美化附 `out/compare.png` 前后对比图，生成附 `out/sheet.png` 全览图
 - 一句话报五维自评的分数和最弱的一项
-- 一两句话说明风格、插画来源（哪家模型或程序化插画）、字体，美化时说明有无精修文字，生成时说明哪些内容需要用户再核实
+- 用了实拍图时附 `out/image_credits.md`，需要署名的图提醒用户
+- 一两句话说明风格、插画来源（哪家模型、程序化插画、图库实拍或用户素材）、字体，美化时说明有无精修文字，生成时说明哪些内容需要用户再核实
 - 用户连接了本地文件夹时，写回素材所在的位置
 
 ## 硬规则

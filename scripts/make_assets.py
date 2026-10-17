@@ -19,6 +19,8 @@ they are drawn together in one image (same style, one call) and sliced apart; wi
 each item is drawn procedurally. Each item is saved under its own id.
 
 Results go to WORK_DIR/assets/ and WORK_DIR/assets/manifest.json records how each was made.
+Pictures placed by photo_assets.py (stock photos, the user's own files) are kept, even with
+--force, unless named in --only.
 """
 import argparse
 import sys
@@ -171,6 +173,17 @@ def main():
         ok, why = False, "procedural forced by --procedural"
     print(f"image provider: {'AI ' + why if ok else 'procedural fallback (' + why + ')'}   config: {cfg.get('_path')}")
     if a.status:
+        plan_path = work / "plan.json"
+        if plan_path.exists():
+            slots = [x for x in load_json(plan_path).get("assets", []) if x["kind"] in ("hero", "sheet")]
+            n = sum(len(x.get("items", [])) or 1 for x in slots)
+            man_path = work / "assets" / "manifest.json"
+            placed = [m for m in (load_json(man_path).get("assets", []) if man_path.exists() else [])
+                      if m.get("method", "").startswith("photo:") or m.get("method") == "user"]
+            print(f"picture slots: {n}, filled with photos or the user's pictures: {len(placed)}")
+            if n and not ok and not placed:
+                print("ASK 需要配图但没有生图模型：先问用户选哪种，接入生图模型、搜公开图库、用自己的素材，"
+                      "还是用程序化插画（见 SKILL.md「配图来源」）")
         return
     style = load_style(work / "style.json")
     plan = load_json(work / "plan.json")
@@ -197,6 +210,10 @@ def main():
             fresh = out.exists() and asset["id"] in done
         if fresh and not a.force:
             continue
+        # a photo or the user's own picture placed by photo_assets.py stays unless asked for by name
+        kept = done.get(asset["id"], {}).get("method", "")
+        if (kept.startswith("photo:") or kept == "user") and out.exists() and not (only and asset["id"] in only):
+            continue
         todo.append((asset, out))
 
     def ai_bound(asset):
@@ -212,9 +229,18 @@ def main():
                 print(f"--- {asset['id']}  ({path})\n{text}\n")
         return
 
+    placed = {i for i, m in done.items() if m.get("method", "").startswith("photo:") or m.get("method") == "user"}
+    placed -= only or set()
+
     def work_one(item):
         asset, out = item
         recs = []
+        if asset["kind"] == "sheet" and placed & {it["id"] for it in asset.get("items", [])}:
+            # some pictures of this sheet are photos: draw only the others, one by one
+            asset = dict(asset, items=[it for it in asset["items"] if it["id"] not in placed])
+            if not asset["items"]:
+                return []
+            asset["method"] = "procedural" if not ai_bound(asset) else asset.get("method", "auto")
         if asset["kind"] == "sheet":
             base = {"sheet": asset["id"], "kind": "hero"}
             if ai_bound(asset):
