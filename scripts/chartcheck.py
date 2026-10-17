@@ -98,7 +98,11 @@ def spec_label_format(spec):
 # ------------------------------------------------------------------ reading charts
 TYPE_NAMES = {"COLUMN_CLUSTERED": "column", "COLUMN_STACKED": "stacked", "BAR_CLUSTERED": "bar",
               "LINE": "line", "LINE_MARKERS": "line", "PIE": "pie", "DOUGHNUT": "doughnut",
-              "BAR_STACKED": "stacked", "COLUMN_STACKED_100": "stacked"}
+              "BAR_STACKED": "stacked", "COLUMN_STACKED_100": "stacked",
+              "XY_SCATTER": "scatter", "XY_SCATTER_LINES": "scatter", "XY_SCATTER_LINES_NO_MARKERS": "scatter",
+              "XY_SCATTER_SMOOTH": "scatter", "XY_SCATTER_SMOOTH_NO_MARKERS": "scatter"}
+SPEC_TYPES = ("column", "bar", "line", "pie", "doughnut", "stacked", "scatter")
+C_NS = "{http://schemas.openxmlformats.org/drawingml/2006/chart}"
 
 
 def _axis_title(axis):
@@ -110,50 +114,129 @@ def _axis_title(axis):
     return ""
 
 
+def _own_format(el):
+    """The format code an element sets itself; None when it has none or follows the sheet
+    (sourceLinked="1": PowerPoint then shows the numbers in the embedded sheet's format)."""
+    nf = el.find(C_NS + "numFmt") if el is not None else None
+    if nf is None or nf.get("sourceLinked") == "1":
+        return None
+    return nf.get("formatCode")
+
+
+def _sheet_format(ser, tag="val"):
+    """The embedded sheet's format of a series' numbers (what linked labels and axes show)."""
+    if ser is None:
+        return None
+    for t in (tag, "yVal") if tag == "val" else (tag,):
+        nf = ser.find(f"{C_NS}{t}//{C_NS}numCache/{C_NS}formatCode")
+        if nf is not None and (nf.text or "").strip():
+            return nf.text.strip()
+    return None
+
+
+def _cache_numbers(ser, tag):
+    out = []
+    el = ser.find(C_NS + tag) if ser is not None else None
+    if el is None:
+        return out
+    pts = {}
+    for pt in el.iter(C_NS + "pt"):
+        v = pt.find(C_NS + "v")
+        try:
+            pts[int(pt.get("idx", len(pts)))] = float(v.text)
+        except (TypeError, ValueError, AttributeError):
+            pass
+    n = max(pts) + 1 if pts else 0
+    return [pts.get(i) for i in range(n)]
+
+
+def _labels_shown(dl):
+    if dl is None:
+        return False
+    d = dl.find(C_NS + "delete")
+    if d is not None and d.get("val") in ("1", "true"):
+        return False
+    sv = dl.find(C_NS + "showVal")
+    sp = dl.find(C_NS + "showPercent")
+    return any(e is not None and e.get("val") in ("1", "true") for e in (sv, sp))
+
+
 def read_chart(chart):
-    """A chart object -> {type, title, categories, series, label_format, axis_format, x_title, y_title}."""
+    """A chart object -> {type, title, categories, series, label_format, axis_format, x_title, y_title}.
+
+    Formats come from the XML, not python-pptx's accessors: an axis or label without its own
+    numFmt, or with sourceLinked="1", shows the embedded sheet's format (0.312 under "0.0%"
+    reads 31.2%), and python-pptx reports that case as "General"."""
     try:
         tname = str(chart.chart_type).split(".")[-1].split(" ")[0]
     except Exception:  # noqa: BLE001
         tname = ""
+    kind = TYPE_NAMES.get(tname, tname.lower())
     title = ""
     try:
         if chart.has_title and chart.chart_title.has_text_frame:
             title = chart.chart_title.text_frame.text.strip()
     except Exception:  # noqa: BLE001
         pass
-    plot = chart.plots[0]
-    cats = [str(c) for c in plot.categories]
-    series = [{"name": s.name or "", "values": [None if v is None else float(v) for v in s.values]}
-              for p in chart.plots for s in p.series]
+    cs = chart._chartSpace
+    plot_el = cs.find(f".//{C_NS}plotArea")
+    sers = list(plot_el.iter(C_NS + "ser")) if plot_el is not None else []
+    first = sers[0] if sers else None
+    sheet_fmt = _sheet_format(first)
+    series = []
+    if kind == "scatter":
+        for ser in sers:
+            tx = ser.find(f"{C_NS}tx//{C_NS}v")
+            series.append({"name": (tx.text if tx is not None else "") or "",
+                           "x": _cache_numbers(ser, "xVal"), "values": _cache_numbers(ser, "yVal")})
+        xs = series[0]["x"] if series else []
+        cats = [render(x, _sheet_format(first, "xVal") or "General") for x in xs]
+    else:
+        plot = chart.plots[0]
+        try:
+            cats = [str(c) for c in plot.categories]
+        except Exception:  # noqa: BLE001
+            cats = []
+        series = [{"name": s.name or "", "values": [None if v is None else float(v) for v in s.values]}
+                  for p in chart.plots for s in p.series]
+    # data labels, most specific first: a point's own label, the series' labels, the chart
+    # group's labels. A series dLbls replaces the group's entirely, numFmt included, so a
+    # format set on the group does not reach labels the series defines itself.
     label_fmt = None
+    groups = [g for g in (plot_el if plot_el is not None else []) if g.tag.endswith("Chart")]
+    sdl = first.find(C_NS + "dLbls") if first is not None else None
+    if sdl is not None:
+        pts = [d for d in sdl.findall(C_NS + "dLbl") if _labels_shown(d)]
+        if pts:
+            label_fmt = _own_format(pts[0]) or _own_format(sdl) or sheet_fmt or "General"
+        elif _labels_shown(sdl):
+            label_fmt = _own_format(sdl) or sheet_fmt or "General"
+    else:
+        for dl in [g.find(C_NS + "dLbls") for g in groups]:
+            if _labels_shown(dl):
+                label_fmt = _own_format(dl) or sheet_fmt or "General"
+                break
+    # value axis: for a scatter chart the vertical one
+    axis_fmt = None
+    vals = plot_el.findall(C_NS + "valAx") if plot_el is not None else []
+    va = next((a for a in vals if (a.find(C_NS + "axPos") is not None
+                                   and a.find(C_NS + "axPos").get("val") in ("l", "r"))), vals[0] if vals else None)
+    if kind not in ("pie", "doughnut") and va is not None:
+        axis_fmt = _own_format(va) or sheet_fmt or "General"
+    x_title, y_title = "", ""
     try:
-        if plot.has_data_labels:
-            dl = plot.data_labels
-            label_fmt = dl.number_format if not dl.number_format_is_linked else None
-    except Exception:  # noqa: BLE001
-        pass
-    axis_fmt, x_title, y_title = None, "", ""
-    try:
-        va = chart.value_axis
-        axis_fmt = va.tick_labels.number_format if not va.tick_labels.number_format_is_linked else None
-        y_title = _axis_title(va)
-    except Exception:  # noqa: BLE001
-        pass
-    try:
+        y_title = _axis_title(chart.value_axis)
         x_title = _axis_title(chart.category_axis)
     except Exception:  # noqa: BLE001
         pass
-    # linked formats come from the embedded sheet; the series' own format code is the best guess
-    if not label_fmt and not axis_fmt:
-        try:
-            nf = chart._chartSpace.find(".//{http://schemas.openxmlformats.org/drawingml/2006/chart}numCache/"
-                                        "{http://schemas.openxmlformats.org/drawingml/2006/chart}formatCode")
-            if nf is not None and nf.text:
-                axis_fmt = nf.text
-        except Exception:  # noqa: BLE001
-            pass
-    return {"type": TYPE_NAMES.get(tname, tname.lower()), "title": title, "categories": cats, "series": series,
+    if kind == "scatter" and len(vals) >= 2:
+        # python-pptx gives the first valAx for both; read the titles straight from each axis
+        def _t(ax):
+            t = ax.find(f"{C_NS}title")
+            return "".join(x.text or "" for x in t.iter("{http://schemas.openxmlformats.org/drawingml/2006/main}t")).strip() if t is not None else ""
+        hx = next((a for a in vals if a is not va), None)
+        y_title, x_title = _t(va), _t(hx) if hx is not None else ""
+    return {"type": kind, "title": title, "categories": cats, "series": series,
             "label_format": label_fmt, "axis_format": axis_fmt, "x_title": x_title, "y_title": y_title}
 
 
@@ -170,20 +253,39 @@ def charts_on_slide(slide):
     return out
 
 
+def spec_charts(slide):
+    """The chart specs of a deck.json slide: "chart" (one) or "charts" (two or three side by side)."""
+    if slide.get("charts"):
+        return [c for c in slide["charts"] if c]
+    return [slide["chart"]] if slide.get("chart") else []
+
+
+def _xcats(xs):
+    return [render(x, "General") for x in xs]
+
+
 def from_spec(spec):
     """deck.json chart spec -> the shape read_chart returns."""
-    return {"type": spec.get("type", "column"), "title": spec.get("title", ""),
-            "categories": [str(c) for c in spec.get("categories", [])],
-            "series": [{"name": s.get("name", ""), "values": [None if v is None else float(v) for v in s.get("values", [])]}
-                       for s in spec.get("series", [])],
+    kind = spec.get("type", "column")
+    series = []
+    for s in spec.get("series", []):
+        d = {"name": s.get("name", ""), "values": [None if v is None else float(v) for v in s.get("values", [])]}
+        if kind == "scatter":
+            d["x"] = [float(v) for v in s.get("x", [])]
+        series.append(d)
+    cats = _xcats(series[0]["x"]) if kind == "scatter" and series else [str(c) for c in spec.get("categories", [])]
+    return {"type": kind, "title": spec.get("title", ""), "categories": cats, "series": series,
             "label_format": spec_label_format(spec), "axis_format": None,
             "x_title": spec.get("x_title", ""), "y_title": spec.get("y_title", "")}
 
 
 def draft_spec(ch):
     """A deck.json chart spec drafted from a chart read out of the original."""
-    spec = {"type": ch["type"] if ch["type"] in ("column", "bar", "line", "pie", "doughnut", "stacked") else "column",
-            "categories": ch["categories"], "series": ch["series"]}
+    kind = ch["type"] if ch["type"] in SPEC_TYPES else "column"
+    spec = {"type": kind}
+    if kind != "scatter":
+        spec["categories"] = ch["categories"]
+    spec["series"] = ch["series"]
     fmt = shown_format(ch)
     if fmt and fmt.lower() != "general":
         spec["number_format"] = fmt
@@ -206,7 +308,8 @@ def _norm(s):
 def _values_by_cat(ch):
     out = {}
     for s in ch["series"]:
-        out[s["name"]] = {c: v for c, v in zip(ch["categories"], s["values"])}
+        cats = _xcats(s["x"]) if s.get("x") else ch["categories"]  # scatter: each series has its own x
+        out[s["name"]] = {c: v for c, v in zip(cats, s["values"])}
     return out
 
 
@@ -221,7 +324,14 @@ def compare(ref, out, slide_text=""):
     probs, rows = [], []
     blob = _norm(slide_text)
     # categories (order may legitimately flip for bar charts)
-    if sorted(ref["categories"]) != sorted(out["categories"]):
+    if ref.get("type") == "scatter" or out.get("type") == "scatter":
+        if ref.get("type") != out.get("type"):
+            probs.append(("ERROR", f"图表类型变了，原来是 {ref.get('type')}，现在是 {out.get('type')}（散点图的横轴是数值）"))
+        rx = sorted(c for s in ref["series"] for c in _xcats(s.get("x", [])))
+        ox = sorted(c for s in out["series"] for c in _xcats(s.get("x", [])))
+        if rx != ox:
+            probs.append(("ERROR", f"散点图的横轴数值对不上，原来 {rx[:6]}，现在 {ox[:6]}"))
+    elif sorted(ref["categories"]) != sorted(out["categories"]):
         miss = [c for c in ref["categories"] if c not in out["categories"]]
         extra = [c for c in out["categories"] if c not in ref["categories"]]
         probs.append(("ERROR", f"图表类别对不上，缺少 {miss}，多出 {extra}"))

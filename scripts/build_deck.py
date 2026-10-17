@@ -322,6 +322,63 @@ class Builder:
                     tcPr.append(fill)
         return gf
 
+    def scatter(self, slide, e):
+        """XY scatter: both axes are numbers, so both stay visible with their tick labels."""
+        from pptx.chart.data import XyChartData
+        from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION, XL_MARKER_STYLE
+        spec = e["chart"]
+        series = spec.get("series", [])
+        if not series:
+            print(f"WARN 散点图没有数据，跳过：{spec.get('title', '')!r}")
+            return None
+        cd = XyChartData()
+        for sr in series:
+            xs = cd.add_series(sr.get("name", ""))
+            for x, y in zip(sr.get("x", []), sr.get("values", [])):
+                xs.add_data_point(x, y)
+        gf = slide.shapes.add_chart(XL_CHART_TYPE.XY_SCATTER, self.E(e["x"]), self.E(e["y"]),
+                                    self.E(e["w"]), self.E(e["h"]), cd)
+        ch = gf.chart
+        P = self.S
+        ch.font.size = self.pt(e.get("size", 12))
+        ch.font.color.rgb = RGBColor.from_string(P.c("muted"))
+        ch.font.name = P.fonts["body_latin"]
+        ch.has_title = False
+        palette = [P.c("primary"), P.c("accent"), P.c("primary@0.45"), P.c("muted")]
+        for i, sr in enumerate(ch.plots[0].series):
+            col = palette[i % len(palette)]
+            sr.format.line.fill.background()  # points only, no connecting line
+            sr.marker.style = XL_MARKER_STYLE.CIRCLE
+            sr.marker.size = 11
+            sr.marker.format.fill.solid()
+            sr.marker.format.fill.fore_color.rgb = RGBColor.from_string(col)
+            sr.marker.format.line.color.rgb = RGBColor.from_string(P.c("surface"))
+        fmt = spec_label_format(spec)
+        axes = ch._chartSpace.findall(".//" + qn("c:valAx"))
+        from pptx.chart.axis import ValueAxis
+        for ax_el in axes:
+            ax = ValueAxis(ax_el)
+            pos = ax_el.find(qn("c:axPos"))
+            vertical = pos is not None and pos.get("val") in ("l", "r")
+            ax.visible = True
+            ax.has_major_gridlines = vertical
+            if vertical:
+                ax.major_gridlines.format.line.color.rgb = RGBColor.from_string(P.c("line"))
+                if fmt != "General":
+                    ax.tick_labels.number_format = fmt
+                    ax.tick_labels.number_format_is_linked = False
+            elif spec.get("x_number_format"):
+                ax.tick_labels.number_format = spec["x_number_format"]
+                ax.tick_labels.number_format_is_linked = False
+            ax.format.line.color.rgb = RGBColor.from_string(P.c("line"))
+            ax.tick_labels.font.size = self.pt(e.get("size", 12))
+            ax.tick_labels.font.color.rgb = RGBColor.from_string(P.c("text"))
+        ch.has_legend = len(series) > 1
+        if ch.has_legend:
+            ch.legend.position = XL_LEGEND_POSITION.BOTTOM
+            ch.legend.include_in_layout = False
+        return gf
+
     def chart(self, slide, e):
         from pptx.chart.data import CategoryChartData
         from pptx.enum.chart import XL_CHART_TYPE, XL_LEGEND_POSITION, XL_LABEL_POSITION
@@ -330,6 +387,11 @@ class Builder:
         types = {"column": XL_CHART_TYPE.COLUMN_CLUSTERED, "bar": XL_CHART_TYPE.BAR_CLUSTERED,
                  "line": XL_CHART_TYPE.LINE_MARKERS, "pie": XL_CHART_TYPE.PIE,
                  "doughnut": XL_CHART_TYPE.DOUGHNUT, "stacked": XL_CHART_TYPE.COLUMN_STACKED}
+        if kind == "scatter":
+            return self.scatter(slide, e)
+        if not spec.get("categories") or not spec.get("series"):
+            print(f"WARN 图表没有分类或数据，跳过：{spec.get('title', '')!r}")
+            return None
         cd = CategoryChartData()
         cats = [str(c) for c in spec["categories"]]
         if kind == "bar":  # bar charts draw bottom-up; reverse so the first category is on top
@@ -450,7 +512,12 @@ class Builder:
                         el = lbls.find(qn(tag))
                         if el is not None:
                             el.set("val", val)
+                    if fmt != "General":
+                        # series labels do not inherit the plot's number format; give them their own
+                        _set_numfmt(lbls, fmt)
                     last = sr.points[npts - 1].data_label
+                    if fmt != "General":
+                        _set_numfmt(last._get_or_add_dLbl(), fmt)
                     last.position = XL_LABEL_POSITION.RIGHT
                     last.font.size = self.pt(e.get("size", 12))
                     last.font.bold = True
@@ -538,13 +605,12 @@ class Builder:
         page = s.get("page", "")
         if not page and self.meta.get("auto_page") and m == "content":
             page = f"{s['n']:02d} / {self.meta.get('total') or self.total:02d}"
-        src = s.get("source") or s.get("footnote")
-        if src:
-            # "footnote" is printed as written; "source" gets a 来源 label unless it has one
-            src_txt = src if (s.get("footnote") and not s.get("source")) or SOURCE_LABEL.match(src) else f"来源：{src}"
+        src_txt = fine_line(s)
+        if src_txt:
             # under the pill when there is one, otherwise on its own line above the footer row
             yb = 7.12 if (s.get("takeaway") and not info.get("uses_takeaway")) else 6.52
-            els.append(L.T(src_txt, CANVAS_W / 2 - 3.2, yb, 6.4, 0.26, 10.5, "subtle", align="c", valign="m"))
+            sw_ = min(L.CW, max(6.4, text_width_pt(src_txt, 10.5) / 72 + 0.6))
+            els.append(L.T(src_txt, CANVAS_W / 2 - sw_ / 2, yb, sw_, 0.26, 10.5, "subtle", align="c", valign="m"))
         footer = self.meta.get("footer", "") if s.get("show_footer", m == "content") else ""
         meta_txt = "  ·  ".join([t for t in (footer, page) if t])
         tk = s.get("takeaway")
@@ -600,16 +666,42 @@ class Builder:
             els.append(L.T(footer, L.MX, 6.88, 5, 0.3, 10.5, "subtle", valign="m"))
         folio = s.get("page") or f"{s['n']:02d} / {self.meta.get('total') or self.total:02d}"
         els.append(L.T(folio, CANVAS_W - L.MX - 2, 6.88, 2, 0.3, 10.5, "subtle", True, "display", align="r", valign="m"))
-        src = s.get("source") or s.get("footnote")
-        if src:
-            # "footnote" is printed as written; "source" gets a 来源 label unless it has one
-            src_txt = src if (s.get("footnote") and not s.get("source")) or SOURCE_LABEL.match(src) else f"来源：{src}"
+        src_txt = fine_line(s)
+        if src_txt:
             els.append(L.T(src_txt, CANVAS_W / 2 - 3.2, 6.88, 6.4, 0.3, 10.5, "subtle", align="c", valign="m"))
         return els
 
 
 # a source line that already carries its own label ("数据来源：", "资料来源", "Source:") is not prefixed again
 SOURCE_LABEL = re.compile(r"^\s*(数据|资料|图片|信息)?(来源|出处)|^\s*(source|data|via)\b", re.I)
+
+
+def _set_numfmt(el, fmt):
+    """Give a c:dLbls / c:dLbl element its own number format (it goes right after idx/delete)."""
+    from lxml import etree
+    old = el.find(qn("c:numFmt"))
+    if old is not None:
+        el.remove(old)
+    nf = etree.Element(qn("c:numFmt"))
+    nf.set("formatCode", fmt)
+    nf.set("sourceLinked", "0")
+    pos = 0
+    for i, ch in enumerate(el):
+        if ch.tag in (qn("c:dLbl"), qn("c:idx"), qn("c:delete"), qn("c:layout"), qn("c:tx")):
+            pos = i + 1
+    el.insert(pos, nf)
+
+
+def fine_line(s):
+    """The small line under a page: the footnote as written, then the source (labelled 来源
+    unless it carries its own label). Both are kept when a slide has both."""
+    parts = []
+    if s.get("footnote"):
+        parts.append(s["footnote"])
+    src = s.get("source")
+    if src:
+        parts.append(src if SOURCE_LABEL.match(src) else f"来源：{src}")
+    return "    ".join(parts)
 
 # modular scale (~1.2 ratio) in pt; style.json "type_scale" overrides it, false turns snapping off
 from common import TYPE_SCALE, LADDER, snap_size  # noqa: E402

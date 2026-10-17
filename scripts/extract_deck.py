@@ -201,6 +201,11 @@ def guess_role(t, sw, sh_, max_size_top):
     if re.fullmatch(r"\d{1,3}\s*/\s*\d{1,3}", txt):
         return "page"
     if t["y"] > sh_ * 0.82 and size <= 12:
+        # a note, source or starred line at the bottom belongs to this page (deck.json
+        # "footnote" / "source"), not to the footer repeated on every page
+        from chartcheck import FINE_PRINT, FOOT_MARK
+        if FINE_PRINT.match(txt) or FOOT_MARK.match(txt):
+            return "footnote"
         return "footer"
     if t["y"] < sh_ * 0.25 and size >= max_size_top - 0.1 and size >= 24:
         return "title"
@@ -303,10 +308,18 @@ def main():
         if charts:
             from chartcheck import draft_spec
             # a ready chart spec: copy it into deck.json as-is (type "chart"), keeping number_format,
-            # title and axis titles, or the labels lose their unit
+            # title and axis titles, or the labels lose their unit; two or three charts on one
+            # page go into "charts" of a single chart page
             d_slide["charts"] = [draft_spec(c) for c in charts]
-            if len(charts) == 1 and d_slide["type"] == "content":
+            if len(charts) <= 3 and d_slide["type"] == "content":
                 d_slide["type"] = "chart"
+        tables = [p for p in shapes if p["kind"] == "table"]
+        if tables:
+            # a table's cells are content too: ready "columns" and "rows" for a table page
+            d_slide["tables"] = [{"columns": t_["rows"][0] if t_["rows"] else [], "rows": t_["rows"][1:]}
+                                 for t_ in tables]
+            if len(tables) == 1 and not charts and d_slide["type"] == "content":
+                d_slide["type"] = "table"
         draft["slides"].append(d_slide)
         for u in units:
             if u["role"] == "footer" and not draft["meta"]["footer"]:

@@ -1455,29 +1455,56 @@ def table_layout(s, ctx):
     return els, {"master": "content"}
 
 
-def chart_layout(s, ctx):
-    """Native chart on the left, 1-3 insight cards on the right."""
-    els, tb = title_block(ctx, s)
-    spec = s.get("chart") or {}
-    ins = s.get("insights", [])
-    kind = spec.get("type", "column")
-    cw = 7.5 if ins else CW
-    y0, h = CONTENT_Y, CONTENT_B - CONTENT_Y
-    els.append(card(ctx, MX, y0, cw, h))
+def _chart_panel(ctx, spec, x, y0, cw, h):
+    """One chart in a card: its own title, unit line above, category-axis line below."""
+    els = [card(ctx, x, y0, cw, h)]
     if spec.get("title"):
-        els.append(T(spec["title"], MX + 0.3, y0 + 0.15, cw - 0.6, 0.4, 14, "muted", True, valign="m"))
+        els.append(T(spec["title"], x + 0.3, y0 + 0.15, cw - 0.6, 0.4, 14, "muted", True, valign="m"))
     top = y0 + (0.55 if spec.get("title") else 0.2)
     bottom = y0 + h - 0.15
     # axis titles carry the unit or the meaning of the scale ("单位：万元"); the value axis is
     # hidden, so they sit as small text above and below the plot instead of on the axes
     if spec.get("y_title"):
-        els.append(T(spec["y_title"], MX + 0.3, top, cw - 0.6, 0.32, 12, "muted", valign="m"))
+        els.append(T(spec["y_title"], x + 0.3, top, cw - 0.6, 0.32, 12, "muted", valign="m"))
         top += 0.36
     if spec.get("x_title"):
         bottom -= 0.36
-        els.append(T(spec["x_title"], MX + 0.3, bottom + 0.04, cw - 0.6, 0.32, 12, "muted", align="c", valign="m"))
-    els.append({"t": "chart", "x": MX + 0.2, "y": top, "w": cw - 0.4, "h": bottom - top, "chart": spec,
-                "size": 14})
+        els.append(T(spec["x_title"], x + 0.3, bottom + 0.04, cw - 0.6, 0.32, 12, "muted", align="c", valign="m"))
+    els.append({"t": "chart", "x": x + 0.2, "y": top, "w": cw - 0.4, "h": bottom - top, "chart": spec, "size": 14})
+    return els
+
+
+def chart_layout(s, ctx):
+    """Native chart on the left, 1-3 insight cards on the right. With "charts" (two or three
+    charts on one page, as in many originals) the charts sit side by side, one card each, and
+    the insights run as a row of short cards underneath."""
+    els, tb = title_block(ctx, s)
+    specs = [c for c in (s.get("charts") or [s.get("chart") or {}]) if c is not None]
+    ins = s.get("insights", [])
+    y0, h = CONTENT_Y, CONTENT_B - CONTENT_Y
+    if len(specs) > 1:
+        rh = 0.95 if ins else 0
+        ch_h = h - (rh + 0.2 if ins else 0)
+        gap = 0.3
+        n = len(specs)
+        cw = (CW - gap * (n - 1)) / n
+        for i, spec in enumerate(specs):
+            els += _chart_panel(ctx, spec, MX + i * (cw + gap), y0, cw, ch_h)
+        if ins:
+            iy = y0 + ch_h + 0.2
+            m = len(ins)
+            iw = (CW - gap * (m - 1)) / m
+            for i, t in enumerate(ins):
+                x = MX + i * (iw + gap)
+                step(i)
+                els.append(card(ctx, x, iy, iw, rh, "tint" if i == 0 else "glass"))
+                els.append(T(t, x + 0.25, iy + 0.08, iw - 0.5, rh - 0.16, body_size(t, iw - 0.5, rh - 0.16, 17, 11),
+                             "text", i == 0, valign="m"))
+            step_end()
+        return els, {"master": "content"}
+    spec = specs[0] if specs else {}
+    cw = 7.5 if ins else CW
+    els += _chart_panel(ctx, spec, MX, y0, cw, h)
     if ins:
         x = MX + cw + 0.4
         w = CANVAS_W - MX - x

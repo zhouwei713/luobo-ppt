@@ -34,7 +34,7 @@ LIMITS = {  # on-screen characters (notes excluded) and list length per slide
 TOPIC_WORDS = ["介绍", "概述", "简介", "总结", "背景", "目录", "注意事项", "优势", "方法", "原理", "概况",
                "现状", "分析", "说明", "要点", "内容", "问题", "结论", "谢谢", "感谢", "Q&A", "结束"]
 NON_SCREEN = {"n", "type", "layout", "notes", "page", "emphasis", "icon", "purpose", "show_footer", "source",
-              "chart", "kind", "highlight_col", "image", "at", "frame", "flow", "tone", "boxed", "stamps"}
+              "chart", "charts", "kind", "highlight_col", "image", "at", "frame", "flow", "tone", "boxed", "stamps"}
 NO_TITLE_TYPES = {"cover", "closing", "section", "toc", "question", "big_quote"}
 
 

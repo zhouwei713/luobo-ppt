@@ -123,8 +123,11 @@ deck.json 描述"这份 PPT 在讲什么"，和样式无关。版式函数只认
 
 `chart` 的写法
 
-- `type` 取 column、bar、line、pie、doughnut、stacked
+- `type` 取 column、bar、line、pie、doughnut、stacked、scatter
 - `categories` 类别，`series` 每条 {name, values}，values 和 categories 一样长
+- 散点图（scatter）不写 categories，每组写 {name, x, values}，x 和 values 一样长；横轴是数值，两条坐标轴都会显示
+- 一页放两三个图表时不写 `chart`，写 `charts: [图表, 图表]`，并排各占一张卡片，每个图表自己的 title、y_title 照常写；这时 `insights` 排在图表下面一行
+- 页面底部的注释写 `footnote`（原样印出），数据来源写 `source`（自动加"来源："），两个可以同时写
 - `highlight` 要突出的类别序号（单系列柱、条图和饼图生效）
 - `unit` 数字后面带的单位，所有图表类型都生效，写 "%" 时 35 显示成 35%，写 "万" 时显示成 35万；`number_format` 优先于 unit，如 `"0"` `"0.0"` `"#,##0"` `"0%"`（注意 `"0%"` 会把 0.35 显示成 35%，数据是 35 时要用 `'0"%"'` 或者直接写 unit）
 - `title` 图表标题，`y_title` 数值轴说明（常见的是"单位：万元"），`x_title` 类别轴说明；数值轴是隐藏的，这两条会作为小字放在图表上方和下方

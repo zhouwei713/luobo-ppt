@@ -14,6 +14,7 @@ Levels
 """
 import argparse
 import sys
+import re
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -141,7 +142,11 @@ def main():
     deck = load_json(work / "deck.json")
     meta = deck.get("meta", {})
     anchor = (meta.get("anchor") or {}).get("description") or f"a glossy rounded app icon for {meta.get('title', 'the topic')}"
-    glyph = (meta.get("anchor") or {}).get("glyph") or (meta.get("title", "") or "A")[:1].upper()
+    # the tile carries the title's first character when it is a letter; "2026 年…" would put a
+    # lone "2" (or a stray "年") on the cover, so then the first latin letter, else an icon
+    tt = (meta.get("title", "") or "").strip()
+    first = tt[:1] if re.match(r"[A-Za-z\u4e00-\u9fff]", tt) else (re.search(r"[A-Za-z]", tt) or [None])[0]
+    glyph = (meta.get("anchor") or {}).get("glyph") or (first.upper() if first else None)
     topic = meta.get("topic") or meta.get("title", "")
     slides, assets = [], []
     try:

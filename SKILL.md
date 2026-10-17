@@ -37,7 +37,7 @@ description: 做 PPT 和美化 PPT 的一站式 skill，输出可编辑的原生
 
 1. **解析原稿** `python3 $S/extract_deck.py 原稿.pptx $W`，然后看 `source_png/sheet.png`。脚本会修复 LibreOffice 打不开的 zip，也能读出藏在 descr 属性里的口播备注。
 2. **读参考图** `python3 $S/extract_style.py 参考图.png $W`，再亲自看图，按 `references/style_extraction.md` 写 `$W/style.json`，然后 `python3 $S/style_card.py $W` 出风格卡。用户在场就发风格卡确认。
-3. **整理 deck.json**，按 `references/deck_schema.md` 从 `deck.draft.json` 转写。文字逐字复制，局部加粗写成 `**片段**`；图片里的文字重建成 `diagram` 等原生结构；`notes` 原样带上；写好 `meta.anchor` 视觉锚点。原稿页面上的小标签（"01 · 概览"这类章节胶带）写进该页的 `kicker`，条目自带的编号（01、02）写进条目的 `num`，这样换任何列表符号都不会丢字。原稿里用公式编辑器打的公式，解析时会自动转成普通文字公式（如 V′(x) = (a−2x)(a−6x)），照常逐字转写；公式多的讲解页用 `explain` 页型。SVG 图会顺手转一份 PNG（raw.json 里的 png 字段），版式里用 PNG。logo、"AI 生成"标识这类小图写进 `stamps` 原样保留。原稿里的图表在 `deck.draft.json` 每页的 `charts` 里已经整理成现成的图表写法，用 `chart` 页型照抄进去，`number_format`、`title`、`x_title`、`y_title` 一个都不能丢，丢了图上的单位和坐标轴说明就跟着没了。原稿里的软件截图（`media/` 下的图片）用 `screenshot` 或 `screenshots` 页型，截图会放进统一的窗口外框，讲解点可以用 `at` 打在截图上。
+3. **整理 deck.json**，按 `references/deck_schema.md` 从 `deck.draft.json` 转写。文字逐字复制，局部加粗写成 `**片段**`；图片里的文字重建成 `diagram` 等原生结构；`notes` 原样带上；写好 `meta.anchor` 视觉锚点。原稿页面上的小标签（"01 · 概览"这类章节胶带）写进该页的 `kicker`，条目自带的编号（01、02）写进条目的 `num`，这样换任何列表符号都不会丢字。原稿里用公式编辑器打的公式，解析时会自动转成普通文字公式（如 V′(x) = (a−2x)(a−6x)），照常逐字转写；公式多的讲解页用 `explain` 页型。SVG 图会顺手转一份 PNG（raw.json 里的 png 字段），版式里用 PNG。logo、"AI 生成"标识这类小图写进 `stamps` 原样保留。原稿里的图表在 `deck.draft.json` 每页的 `charts` 里已经整理成现成的图表写法，用 `chart` 页型照抄进去，`number_format`、`title`、`x_title`、`y_title` 一个都不能丢，丢了图上的单位和坐标轴说明就跟着没了。一页有两三个图表时整组抄进 `charts`，散点图带着每组的 `x` 原样抄。原稿表格在 `tables` 里，抄进 `table` 页型。页面底部带 * ※ 的注释、来源，role 是 footnote，写进该页的 `footnote` 和 `source`，两个可以同时写。原稿里的软件截图（`media/` 下的图片）用 `screenshot` 或 `screenshots` 页型，截图会放进统一的窗口外框，讲解点可以用 `at` 打在截图上。
 4. 接着走下面的"版式、出图与检查"。
 
 ## 路线 B 生成
