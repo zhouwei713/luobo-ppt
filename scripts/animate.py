@@ -231,7 +231,7 @@ def apply(slide, rendered, mode, effect="rise"):
     steps = {}
     for e, spids in rendered:
         st = e.get("step")
-        if st is None or e.get("role") in ("background", "chrome", "marker", "decor"):
+        if st is None or e.get("role") in ("background", "chrome", "decor"):
             continue
         steps.setdefault(st, []).extend(spids)
     groups = [steps[k] for k in sorted(steps)]

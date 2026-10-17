@@ -1926,14 +1926,25 @@ def explain(s, ctx):
     fsizes = [_formula_size(b["formula"], sizes[i], inner_w) for i, c in enumerate(cols)
               for b in c.get("blocks", []) if "formula" in b]
     fsz = min(fsizes) if fsizes else None
+    # builds: several columns come in one column at a time; a single column comes in by its
+    # groups: a new group at each label or rule, and at text that follows a formula (the next
+    # step of a derivation); formulas and notes ride along with the group before them
+    k = -1
+    prev = None
     for i, c in enumerate(cols):
         fs = sizes[i]
         cx = x0 + i * (colw + gap)
         blocks = c.get("blocks", [])
+        if n > 1:
+            step(i)
         if boxed:
             els.append(card(ctx, cx, y0, colw, y1 - y0))
         bx, by, bw = cx + pad, y0 + pad, inner_w
         for b in blocks:
+            if n == 1 and (k < 0 or "label" in b or "rule" in b or ("text" in b and prev == "formula")):
+                k += 1
+                step(k)
+            prev = next((t for t in ("label", "formula", "rule", "note") if t in b), "text")
             h = _block_h(b, fs, bw, fsz)
             if "label" in b:
                 t = T(b["label"], bx, by, bw, h, fs, "label", True, valign="t")
@@ -1956,6 +1967,7 @@ def explain(s, ctx):
                 t["grp"] = f"ex_text{i}"
             els.append(t)
             by += h + gaps
+    step_end()
     if not boxed:
         # a short diagram-and-notes page sits in the middle of the free height, not at its top
         body = els[head:]
@@ -2078,6 +2090,7 @@ def apply_markers(els, ctx, layout=""):
             out.append(e)
             continue
         s_ = e["size"]
+        n0 = len(out)
         on_fill = e.get("bg") == "surface"  # icons sitting on a primary card use a surface disc
         if mode == "number":
             # the box grows to fit the digits (small icons used to squeeze 12pt numbers into 0.17in)
@@ -2092,4 +2105,10 @@ def apply_markers(els, ctx, layout=""):
         elif mode == "dash":
             out.append(R(e["x"], e["y"] + s_ / 2 - 0.035, min(0.34, s_ * 0.7), 0.07,
                          fill="on_primary" if on_fill else "primary", radius=0.035))
+        # the marker comes in with the item it stands for
+        for m in out[n0:]:
+            if e.get("step") is not None:
+                m["step"] = e["step"]
+            else:
+                m.pop("step", None)
     return out

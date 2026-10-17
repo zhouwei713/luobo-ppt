@@ -143,6 +143,38 @@ class EndToEndTests(unittest.TestCase):
         title = next(sh for sh in steps.shapes if sh.has_text_frame and sh.text_frame.text == "steps")
         self.assertNotIn(title.shape_id, animated)
 
+    def test_explain_builds_by_column_and_by_group(self):
+        cols = [{"blocks": [{"label": f"L{i}"}, {"text": f"t{i}"}]} for i in range(3)]
+        prs, dump = self.build({"meta": {"animation": "click"}, "slides": [
+            {"n": 1, "type": "explain", "title": "cols", "columns": cols},
+            {"n": 2, "type": "explain", "title": "one", "blocks": [
+                {"label": "a"}, {"text": "b"}, {"formula": "x = 1"}, {"text": "c"}, {"formula": "y = 2"},
+                {"rule": "r", "tone": "up"}, {"note": "n"}]}]})
+        self.assertEqual([s["animation"]["builds"] for s in dump["slides"]], [3, 3])
+        steps = [e.get("step") for e in dump["slides"][1]["elements"] if e.get("t") == "text" and e.get("step") is not None]
+        self.assertEqual(sorted(set(steps)), [0, 1, 2])
+
+    def test_list_markers_come_in_with_their_item(self):
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, True)
+        shutil.copy(ROOT / "references" / "styles" / "ink-lime.json", tmp / "style.json")  # bullet: dash
+        items = [{"title": f"t{i}", "text": f"x{i}"} for i in range(4)]
+        deck = {"meta": {"animation": "click"}, "slides": [
+            {"n": 1, "type": "grid", "title": "own numbers", "items": [dict(it, num=f"0{i + 1}") for i, it in enumerate(items)]},
+            {"n": 2, "type": "list", "title": "style dashes", "items": items}]}
+        (tmp / "deck.json").write_text(json.dumps(deck), encoding="utf-8")
+        for args in (("plan_deck.py", tmp), ("build_deck.py", tmp)):
+            r = run_script(*args)
+            self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        slides = json.loads((tmp / "out" / "layout_dump.json").read_text(encoding="utf-8"))["slides"]
+        nums = [e for e in slides[0]["elements"] if e.get("t") == "text" and e.get("text", "").startswith("0")]
+        self.assertEqual(sorted(e.get("step") for e in nums), [0, 1, 2, 3])
+        dashes = [e for e in slides[1]["elements"] if e.get("t") == "rect" and e.get("h") == 0.07]
+        self.assertEqual(sorted(e.get("step") for e in dashes), [0, 1, 2, 3])
+        prs = Presentation(str(tmp / "out" / "beautified.pptx"))
+        texts = {sh.shape_id for sh in prs.slides[0].shapes if sh.has_text_frame and sh.text_frame.text.startswith("0")}
+        self.assertTrue(texts <= A.animated_ids(prs.slides[0]))
+
     def test_default_is_transition_only(self):
         prs, dump = self.build({"meta": {}, "slides": [
             {"n": 1, "type": "list", "title": "list", "items": [{"text": "a"}, {"text": "b"}]}]})
