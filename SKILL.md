@@ -99,11 +99,12 @@ python3 $S/photo_assets.py drop   $W hero_01               # 退回插画
 ```
 
 - 搜图前先看 plan.json 里哪些图位值得放照片：封面、章节页、结尾页和图文页的大图位最合适；内容页右上角的小装饰位放照片偏挤，脚本会提醒，这类页继续用插画
-- 候选图先看 `sheet.png` 再挑，挑和这一页内容真正相关、画面干净、没有水印和大段文字的；都不合适就换关键词或退回插画，宁缺毋滥
+- 候选图先看 `sheet.png` 再挑，挑和这一页内容真正相关、画面干净、没有水印和大段文字的，特别留意杯子、招牌、包装上别家的品牌名；都不合适就换关键词或退回插画，宁缺毋滥
 - 照片会按图位裁切、圆角、加柔和投影；想让照片和配色更统一加 `--tint 0.12`；主体被裁掉就用 `--focus X Y` 调保留位置
 - 只收可商用、可修改的图：CC0、公有领域、CC BY、CC BY-SA，以及 Pexels、Unsplash、Pixabay 自家协议（这三家要用户在环境变量里配免费 key，见 `references/imagegen_config.md`）
 - CC BY 和 CC BY-SA 必须署名：脚本会打出 `CREDIT` 行。生成模式把它加到该页 `notes` 末尾；美化模式不改备注，把 `out/image_credits.md` 交给用户自己决定放哪
-- 输出 `NO_NETWORK` 说明图库连不上（网络受限），告诉用户，改用他的素材或程序化插画
+- 输出 `NO_NETWORK` 说明命令行连不上图库（网络受限）。这时如果有浏览器工具，可以在浏览器里请求 Openverse 接口（`https://api.openverse.org/v1/images/?q=关键词&license_type=commercial,modification`），挑好图拿到图片文件，把作者、原始页面、协议、原图宽高写进一个 json，用 `local $W hero_01 图片 --credit meta.json` 放进去，署名照样记录；没有浏览器就告诉用户，改用他的素材或程序化插画
+- 原图太小（裁到图位后不到图位宽度的一半）脚本会提醒会发虚，换一张大图
 - 选好的照片和用户素材之后重跑 `make_assets.py`（包括 `--force`）都会保留，除非在 `--only` 里点名
 
 ## 交付

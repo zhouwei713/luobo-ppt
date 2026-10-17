@@ -132,6 +132,22 @@ class FlowTests(unittest.TestCase):
         self.assertIn("Jane", credits)
         self.assertIn("CC BY", credits)
 
+    def test_local_with_credit_and_low_resolution_note(self):
+        meta = Path(self.tmp) / "meta.json"
+        meta.write_text(json.dumps({"source": "openverse", "via": "flickr", "author": "Ann", "license": "by",
+                                    "page": "https://example.org", "width": 300, "height": 200}), encoding="utf-8")
+        r = run_script("photo_assets.py", "local", self.work, self.hid, self.photo, "--credit", meta)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("发虚", r.stdout)
+        self.assertIn("Flickr（经 Openverse）", r.stdout)
+        self.assertEqual(self.manifest()[self.hid]["method"], "photo:openverse")
+
+    def test_local_refuses_non_commercial_credit(self):
+        meta = Path(self.tmp) / "nc.json"
+        meta.write_text(json.dumps({"source": "openverse", "license": "by-nc"}), encoding="utf-8")
+        r = run_script("photo_assets.py", "local", self.work, self.hid, self.photo, "--credit", meta)
+        self.assertNotEqual(r.returncode, 0)
+
     def test_search_offline_exits_2(self):
         with patch.object(PA, "fetch", side_effect=urllib.error.URLError("blocked")), \
                 patch("sys.argv", ["photo_assets.py", "search", str(self.work), self.hid, "cat", "--sources", "openverse,wikimedia"]):

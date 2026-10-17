@@ -7,6 +7,7 @@ Usage:
   python photo_assets.py search WORK --queries queries.json        # {"hero_01": "...", "hero_05": "..."}
   python photo_assets.py pick   WORK hero_03 2                     # number from the candidate sheet
   python photo_assets.py local  WORK hero_03 path/to/photo.jpg      # the user's own picture
+  python photo_assets.py local  WORK hero_03 photo.jpg --credit meta.json   # a library picture fetched elsewhere
   python photo_assets.py drop   WORK hero_03                       # back to an illustration on the next make_assets
   python photo_assets.py credits WORK                              # rewrite out/image_credits.md
   python photo_assets.py sources                                   # which libraries are usable now
@@ -56,7 +57,8 @@ def fetch(url, headers=None, timeout=20):
 
 
 def get_json(url, headers=None):
-    return json.loads(fetch(url, headers).decode("utf-8"))
+    # Openverse serves its browsable HTML page unless JSON is asked for
+    return json.loads(fetch(url, {"Accept": "application/json", **(headers or {})}).decode("utf-8"))
 
 
 def _key(cfg, name, env):
@@ -266,6 +268,7 @@ def place(work, aid, im, record, tint=0.0, focus=(0.5, 0.42)):
         r_in = st.shape.get("radius", 0.16) or 0
         radius = 0.0 if r_in == 0 else 0.06
         tint_color = _hex_rgb(st.palette["primary"])
+    src_w, src_h = record.pop("_src_size", None) or im.size
     out = fit_photo(im, size, radius, tint, tint_color, focus)
     adir = work / "assets"
     adir.mkdir(parents=True, exist_ok=True)
@@ -278,6 +281,12 @@ def place(work, aid, im, record, tint=0.0, focus=(0.5, 0.42)):
     man["assets"].append(rec)
     save_json(man, man_path)
     write_credits(work)
+    # the slot is drawn at about half its pixel size on a 1080p screen; below that the photo looks soft
+    ar = size[0] / size[1]
+    crop_w = min(src_w, src_h * ar)
+    if crop_w < size[0] * 0.5:
+        print(f"NOTE {aid} 的原图只有 {src_w}x{src_h}，裁到图位后约 {int(crop_w)} 像素宽，放大后会发虚。"
+              f"换一张至少 {int(size[0] * 0.5)} 像素宽的图")
     if small_slot(work, aid):
         print(f"NOTE {aid} 是内容页右上角的小装饰位，照片放这里偏挤。照片优先放封面、章节页、结尾页和图文页，"
               "这一页可以继续用插画，或在 plan.json 里把版式换成 media_text 这类大图版式")
@@ -298,15 +307,22 @@ def write_credits(work):
     for m in sorted(rows, key=lambda m: (slide_of.get(m["id"]) or 0, m["id"])):
         c = m.get("credit", {})
         lines.append(f"| {slide_of.get(m['id']) or ''} | {m['id']} | {c.get('author') or '未署名'} | "
-                     f"[{c.get('source')}]({c.get('page')}) | {LICENSE_NAMES.get(c.get('license'), c.get('license'))} | "
+                     f"[{where(c)}]({c.get('page')}) | {LICENSE_NAMES.get(c.get('license'), c.get('license'))} | "
                      f"{'是' if c.get('license') in NEEDS_CREDIT else '否'} |")
     lines += ["", "CC BY 和 CC BY-SA 的图要在页面或备注里写一行署名，格式如：图片：作者 / 来源 / 协议。"]
     out.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return out
 
 
+def where(c):
+    """Where the picture lives: the original platform, and the search that found it."""
+    via = (c.get("via") or "").strip()
+    src = c.get("source") or ""
+    return f"{via.capitalize()}（经 {src.capitalize()}）" if via and via.lower() != src.lower() else src.capitalize()
+
+
 def credit_line(c):
-    return f"图片：{c.get('author') or '佚名'} / {c.get('source')} / {LICENSE_NAMES.get(c.get('license'), c.get('license'))}"
+    return f"图片：{c.get('author') or '佚名'} / {where(c)} / {LICENSE_NAMES.get(c.get('license'), c.get('license'))}"
 
 
 # ------------------------------------------------------------------ commands
@@ -390,8 +406,10 @@ def cmd_pick(a, cfg):
         except Exception:  # noqa: BLE001
             pass
     credit = {k: c.get(k) for k in ("source", "author", "author_url", "page", "license", "license_url", "title", "via")}
-    path = place(work, a.id, im, {"method": f"photo:{c['source']}", "credit": credit, "query": data.get("query")},
-                 a.tint, tuple(a.focus))
+    rec = {"method": f"photo:{c['source']}", "credit": credit, "query": data.get("query")}
+    if c.get("width") and c.get("height"):
+        rec["_src_size"] = (int(c["width"]), int(c["height"]))
+    path = place(work, a.id, im, rec, a.tint, tuple(a.focus))
     print(f"{a.id} <- {c['source']} #{a.n} ({LICENSE_NAMES.get(c['license'])}) -> {path}")
     if c["license"] in NEEDS_CREDIT:
         print(f"CREDIT 需要署名：{credit_line(credit)}")
@@ -399,12 +417,26 @@ def cmd_pick(a, cfg):
 
 
 def cmd_local(a, cfg):
+    """The user's own picture, or a library picture fetched some other way (a browser, say),
+    with its source and licence in --credit meta.json."""
     from PIL import Image
     src = Path(a.file).expanduser()
     if not src.exists():
         raise SystemExit(f"no such file {src}")
-    path = place(a.work, a.id, Image.open(src), {"method": "user", "source_file": str(src)}, a.tint, tuple(a.focus))
+    rec = {"method": "user", "source_file": str(src)}
+    if a.credit:
+        c = json.loads(Path(a.credit).read_text(encoding="utf-8"))
+        lic = (c.get("license") or "").lower()
+        if lic not in OK_CC and lic not in ("pexels", "unsplash", "pixabay"):
+            raise SystemExit(f"licence {lic!r} is not one that allows commercial use and changes; pick another picture")
+        credit = {k: c.get(k) for k in ("source", "author", "author_url", "page", "license", "license_url", "title", "via")}
+        rec = {"method": f"photo:{c.get('source') or 'web'}", "credit": credit, "source_file": str(src)}
+        if c.get("width") and c.get("height"):
+            rec["_src_size"] = (int(c["width"]), int(c["height"]))
+    path = place(a.work, a.id, Image.open(src), rec, a.tint, tuple(a.focus))
     print(f"{a.id} <- {src.name} -> {path}")
+    if rec.get("credit", {}).get("license") in NEEDS_CREDIT:
+        print(f"CREDIT 需要署名：{credit_line(rec['credit'])}")
     return 0
 
 
@@ -440,6 +472,8 @@ def main():
         p.add_argument("work")
         p.add_argument("id")
         p.add_argument("n" if name == "pick" else "file", type=int if name == "pick" else str)
+        if name == "local":
+            p.add_argument("--credit", help="json with source, author, page, license (and width, height of the original)")
         p.add_argument("--tint", type=float, default=0.0, help="0..0.3, wash toward the primary colour")
         p.add_argument("--focus", type=float, nargs=2, default=[0.5, 0.42], metavar=("X", "Y"),
                        help="where to keep when cropping, as fractions of width and height")
