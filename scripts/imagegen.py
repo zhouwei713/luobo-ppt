@@ -16,6 +16,7 @@ Providers:
   gemini             Google Gemini image models (generateContent, inline image data).
   ark                Volcengine Ark (Seedream / 即梦 models), OpenAI-style images endpoint.
   openai_compatible  Any service exposing POST {base_url}/images/generations.
+  hiapi              HiAPI async task API (POST /v1/tasks, poll /v1/tasks/{id}); default gpt-image-2.5-flare.
   command            Run a local command template; it must write the PNG to {out}.
 See config.example.json and references/imagegen_config.md.
 """
@@ -37,6 +38,8 @@ DEFAULTS = {
     "ark": {"base_url": "https://ark.cn-beijing.volces.com/api/v3", "model": "doubao-seedream-4-0-250828",
             "api_key_env": "ARK_API_KEY"},
     "openai_compatible": {"api_key_env": "IMAGE_API_KEY"},
+    "hiapi": {"base_url": "https://api.hiapi.ai", "model": "gpt-image-2.5-flare/text-to-image",
+              "api_key_env": "HIAPI_API_KEY"},
 }
 
 
@@ -196,6 +199,41 @@ class ImageGen:
                 if data and data.get("data"):
                     return self._img(data["data"]), False
         raise RuntimeError("no image in Gemini response: " + json.dumps(js)[:300])
+
+    def _gen_hiapi(self, prompt, w, h, transparent, out):
+        """HiAPI task API: POST /v1/tasks, then poll GET /v1/tasks/{id} until success."""
+        import requests
+        ratios = {"1:1": 1, "3:2": 1.5, "2:3": 2 / 3, "4:3": 4 / 3, "3:4": 3 / 4, "16:9": 16 / 9, "9:16": 9 / 16,
+                  "21:9": 21 / 9, "9:8": 9 / 8, "8:9": 8 / 9}
+        ar = min(ratios, key=lambda k: abs(ratios[k] - w / h))
+        res = self.cfg.get("resolution", "1K")
+        inp = {"prompt": prompt, "aspect_ratio": ar, "resolution": res}
+        native = bool(transparent and res == "1K")  # transparent output only exists at 1K
+        if native:
+            inp["background"] = "transparent"
+        hdr = {"Authorization": f"Bearer {self.api_key}"}
+        js = self._post(f"{self.base_url}/v1/tasks", {"model": self.model, "input": inp}, hdr)
+        tid = (js.get("data") or {}).get("taskId")
+        if not tid:
+            raise RuntimeError("no taskId: " + json.dumps(js, ensure_ascii=False)[:300])
+        deadline = time.time() + self.timeout
+        wait = 3
+        while time.time() < deadline:
+            time.sleep(wait)
+            wait = min(wait + 2, 10)
+            r = requests.get(f"{self.base_url}/v1/tasks/{tid}", headers=hdr, timeout=60)
+            if r.status_code >= 400:
+                raise RuntimeError(f"HTTP {r.status_code}: {r.text[:300]}")
+            d = r.json().get("data") or {}
+            st = d.get("status")
+            if st == "success":
+                outs = d.get("output") or []
+                if not outs or not outs[0].get("url"):
+                    raise RuntimeError("success without output url")
+                return self._img(url=outs[0]["url"]), native
+            if st == "fail":
+                raise RuntimeError("task failed: " + json.dumps(d.get("error"), ensure_ascii=False)[:300])
+        raise RuntimeError(f"task {tid} not done after {self.timeout}s")
 
     def _gen_command(self, prompt, w, h, transparent, out):
         from PIL import Image
