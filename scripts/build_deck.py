@@ -18,6 +18,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import load_json, save_json, load_style, CANVAS_W, CANVAS_H, text_width_pt, mix  # noqa: E402
 import layouts as L  # noqa: E402
+import animate as A  # noqa: E402
 
 from pptx import Presentation  # noqa: E402
 from pptx.util import Inches, Pt, Emu  # noqa: E402
@@ -471,24 +472,32 @@ class Builder:
         return gf
 
     def render(self, slide, els):
+        """Draw els in order. Returns [(element, [shape ids it produced])] for the animation pass."""
+        out = []
         for e in els:
-            t = e["t"]
-            if t == "text":
-                self.text(slide, e)
-            elif t == "rect":
-                self.rect(slide, e)
-            elif t == "ellipse":
-                self.rect(slide, e, oval=True)
-            elif t == "image":
-                self.image(slide, e)
-            elif t == "icon":
-                self.icon(slide, e)
-            elif t == "line":
-                self.line(slide, e)
-            elif t == "table":
-                self.table(slide, e)
-            elif t == "chart":
-                self.chart(slide, e)
+            before = len(slide.shapes)
+            self._render_one(slide, e)
+            out.append((e, [sh.shape_id for sh in list(slide.shapes)[before:]]))
+        return out
+
+    def _render_one(self, slide, e):
+        t = e["t"]
+        if t == "text":
+            self.text(slide, e)
+        elif t == "rect":
+            self.rect(slide, e)
+        elif t == "ellipse":
+            self.rect(slide, e, oval=True)
+        elif t == "image":
+            self.image(slide, e)
+        elif t == "icon":
+            self.icon(slide, e)
+        elif t == "line":
+            self.line(slide, e)
+        elif t == "table":
+            self.table(slide, e)
+        elif t == "chart":
+            self.chart(slide, e)
 
     # ---------------------------------------------------------- master chrome
     def master(self, s, info, plan_slide):
@@ -665,7 +674,9 @@ def main():
             b.warnings.append(f"slide {s['n']}: unknown layout {lname}, used list_icons")
             fn, lname = L.list_icons, "list_icons"
         ctx = L.Ctx(style, meta_ctx, assets, ps)
+        L.step_reset()
         els, info = fn(s, ctx)
+        L.step_end()
         els = L.apply_markers(els, ctx, lname)
         # small pictures kept from the original at a fixed spot: logos, AI-generated labels
         for st in s.get("stamps", []):
@@ -714,12 +725,15 @@ def main():
         # content must end above the takeaway pill, the source line or the footer row
         rail = 6.25 if pill else (6.45 if ((s.get("source") or s.get("footnote")) and style.decor.get("chrome") != "editorial") else 6.8)
         slide = prs.slides.add_slide(blank)
-        b.render(slide, all_els)
+        rendered = b.render(slide, all_els)
+        mode, effect = A.resolve(deck.get("meta", {}), s)
+        builds = A.apply(slide, rendered, mode, effect)
         notes = s.get("notes")
         if notes:
             slide.notes_slide.notes_text_frame.text = notes
         dump["slides"].append({"n": s["n"], "layout": lname, "master": info.get("master", "content"),
-                               "rail": rail, "elements": all_els})
+                               "rail": rail, "animation": {"mode": mode, "builds": builds},
+                               "elements": all_els})
     out = Path(a.out) if a.out else work / "out" / "beautified.pptx"
     out.parent.mkdir(parents=True, exist_ok=True)
     prs.save(str(out))
