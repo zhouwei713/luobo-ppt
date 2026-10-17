@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import load_json, save_json, load_style, CANVAS_W, CANVAS_H, text_width_pt, mix  # noqa: E402
 import layouts as L  # noqa: E402
 import animate as A  # noqa: E402
+from chartcheck import spec_label_format  # noqa: E402
 
 from pptx import Presentation  # noqa: E402
 from pptx.util import Inches, Pt, Emu  # noqa: E402
@@ -360,7 +361,7 @@ class Builder:
                 pt.format.line.color.rgb = RGBColor.from_string(P.c("surface"))
             plot.has_data_labels = True
             dl = plot.data_labels
-            dl.number_format = spec.get("number_format", '0"%"' if spec.get("unit") == "%" else "General")
+            dl.number_format = spec_label_format(spec)
             dl.number_format_is_linked = False
             dl.font.size = self.pt(e.get("size", 12))
             dl.font.bold = True
@@ -423,8 +424,10 @@ class Builder:
         dl.font.size = self.pt(e.get("size", 12))
         dl.font.bold = True
         dl.font.color.rgb = RGBColor.from_string(P.c("text"))
-        if spec.get("number_format"):
-            dl.number_format = spec["number_format"]
+        # the unit travels with the numbers: 35 with unit "%" reads 35%, not 35
+        fmt = spec_label_format(spec)
+        if fmt != "General":
+            dl.number_format = fmt
             dl.number_format_is_linked = False
         if kind == "stacked":
             dl.position = XL_LABEL_POSITION.CENTER

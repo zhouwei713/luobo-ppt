@@ -1467,7 +1467,16 @@ def chart_layout(s, ctx):
     if spec.get("title"):
         els.append(T(spec["title"], MX + 0.3, y0 + 0.15, cw - 0.6, 0.4, 14, "muted", True, valign="m"))
     top = y0 + (0.55 if spec.get("title") else 0.2)
-    els.append({"t": "chart", "x": MX + 0.2, "y": top, "w": cw - 0.4, "h": y0 + h - top - 0.15, "chart": spec,
+    bottom = y0 + h - 0.15
+    # axis titles carry the unit or the meaning of the scale ("单位：万元"); the value axis is
+    # hidden, so they sit as small text above and below the plot instead of on the axes
+    if spec.get("y_title"):
+        els.append(T(spec["y_title"], MX + 0.3, top, cw - 0.6, 0.32, 12, "muted", valign="m"))
+        top += 0.36
+    if spec.get("x_title"):
+        bottom -= 0.36
+        els.append(T(spec["x_title"], MX + 0.3, bottom + 0.04, cw - 0.6, 0.32, 12, "muted", align="c", valign="m"))
+    els.append({"t": "chart", "x": MX + 0.2, "y": top, "w": cw - 0.4, "h": bottom - top, "chart": spec,
                 "size": 14})
     if ins:
         x = MX + cw + 0.4
