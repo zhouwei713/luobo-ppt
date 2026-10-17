@@ -14,6 +14,7 @@ Checks
   bounds     element outside the slide = WARN
   contrast   text vs what is under it below WCAG thresholds = WARN
   tiny       font below 10pt = WARN
+  animation  a build pointing at a missing shape = ERROR; more than 6 clicks on one page = WARN
 Writes WORK_DIR/out/qa_report.json. Exit code 1 when any ERROR.
 """
 import argparse
@@ -288,6 +289,16 @@ def main():
                     + ("投影模式下文字不小于 14pt" if proj else "正文建议不小于 12pt"))
     if len(deck["slides"]) > 15 and not any(sl.get("type") == "section" for sl in deck["slides"]):
         add("WARN", 0, "structure", "超过 15 页，没有章节分隔页")
+    # ---------------- animation: every build must point at a shape on its own page
+    import animate as _A
+    for i, slide in enumerate(prs.slides):
+        n = dump["slides"][i]["n"] if i < len(dump["slides"]) else i + 1
+        missing = _A.animated_ids(slide) - {sh.shape_id for sh in slide.shapes}
+        if missing:
+            add("ERROR", n, "animation", f"动画指向不存在的形状 {sorted(missing)}，重新运行 build_deck.py")
+        an = dump["slides"][i].get("animation", {}) if i < len(dump["slides"]) else {}
+        if an.get("mode") == "click" and an.get("builds", 0) > 6:
+            add("WARN", n, "animation", f"这一页要点 {an['builds']} 次才出完，讲的时候容易乱，考虑拆页或改 auto")
     ghost = [f"{sl['n']}. {(sl.get('title') or sl.get('headline') or sl.get('question') or sl.get('quote') or '').replace('**', '')}" for sl in deck["slides"]]
 
     order = {"ERROR": 0, "WARN": 1, "INFO": 2}

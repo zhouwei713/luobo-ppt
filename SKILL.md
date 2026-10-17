@@ -47,8 +47,9 @@ description: 做 PPT 和美化 PPT 的一站式 skill，输出可编辑的原生
 1. **分析素材** `python3 $S/analyze_source.py $W --file 文章.md`（只有题目用 `--topic "…"`，可加 `--minutes 3`）。只有题目或需要补充事实时，先搜索查证，查不到的不写。
 2. **写 deck.json**：先定故事线，再按"内容形状决定页型"逐页写，标题写结论，屏幕放关键词，完整的话放 `notes`。分了章节的稿子在封面后放一页 `toc` 目录（不写 items 会自动列章节），卡片页连得多了插一页 `question` 大问句或 `big_quote` 大引文。工具教程类的素材有截图时，一张图配几个操作点用 `screenshot`，几张图走流程用 `screenshots`。除了常规的卡片、步骤、对比，还有时间线、漏斗、中心辐射、2x2 矩阵、原生表格、原生图表和 SWOT/PEST/五力/商业画布，拿不准装不装得下就 `python3 $S/layout_info.py <版式名>` 查容量和示例。
 3. **检查大纲** `python3 $S/outline_check.py $W`，修到没有 ERROR，把 outline.md 里的"只读标题"发给用户确认。
-4. **定风格**：有参考图走路线 A 第 2 步；没有就 `python3 $S/style_previews.py $W --auto` 出三张样张（用户自己的封面和内容页），发 `previews/sheet.png` 让用户挑，再 `--apply <id>`。预设在 `references/styles/`，共十四套，每套的硬规则排版时要遵守。要在会议室投影的，在 `meta` 里写 `"projection": true`，字号下限会抬高。
-5. 接着走下面的"版式、出图与检查"。
+4. **定动画**：口播稿、讲课按 `scenario` 默认就是逐条点击出现，汇报默认只有翻页效果，一般不用写。用户提了要求或场景特殊再写 `meta.animation`（`none`、`transition`、`auto`、`click`），说明见 `references/deck_schema.md` 的"动画"一节。
+5. **定风格**：有参考图走路线 A 第 2 步；没有就 `python3 $S/style_previews.py $W --auto` 出三张样张（用户自己的封面和内容页），发 `previews/sheet.png` 让用户挑，再 `--apply <id>`。预设在 `references/styles/`，共十四套，每套的硬规则排版时要遵守。要在会议室投影的，在 `meta` 里写 `"projection": true`，字号下限会抬高。
+6. 接着走下面的"版式、出图与检查"。
 
 ## 版式、出图与检查（两条路线共用）
 
@@ -61,6 +62,7 @@ description: 做 PPT 和美化 PPT 的一站式 skill，输出可编辑的原生
    python3 $S/pipeline.py $W
    ```
    依次运行 make_assets（插画、背景、装饰，AI 提示词先落盘到 `prompts/`）、build_deck、render、qa_check、compare_sheet、review。
+   有逐条动画（auto 或 click）时再跑 `python3 $S/anim_preview.py $W`，看 `out/anim/storyboard.png` 确认出现顺序对不对，交付时可以附上 `out/anim/preview.gif`。
 
    | 检查 | 级别 | 处理 |
    |---|---|---|
@@ -68,6 +70,8 @@ description: 做 PPT 和美化 PPT 的一站式 skill，输出可编辑的原生
    | 文字溢出、文本框重叠、文字越过底线（压到胶囊条或页脚） | ERROR | 换版式、拆页，或用 `free` 版式手工摆 |
    | 强调色一页超过 3 处或面积超过 8% | WARN | 只留一处强调 |
    | 文字压插画、对比度不足、出界、正文过小 | WARN | 看图判断，多数要修 |
+   | 动画指向不存在的形状 | ERROR | 重跑 build_deck.py |
+   | 一页要点超过 6 次才出完 | WARN | 拆页，或这一页改 `auto` |
    | 新增的页眉、页码、步骤编号 | INFO | 正常 |
 
 3. **五维自评**：看 `out/sheet.png` 和逐页 PNG，对照 `out/review.md` 里脚本数出的证据，按 `references/critique.md` 给统一、层级、细节、传达、节奏各打 0 到 10 分，写出保留、要修、顺手改三张清单。"要修"的交付前改掉，改完只重跑受影响的步骤，最多三轮。
@@ -107,6 +111,7 @@ description: 做 PPT 和美化 PPT 的一站式 skill，输出可编辑的原生
 ## 常见问题
 
 - `soffice` 转换失败：渲染只影响预览，不影响交付文件；先确认 `extract_deck.py` 产出的 `source.pptx` 能打开
+- 美化后原稿的动画没了：重建时不保留原稿动画，默认只加翻页效果。用户要动画就在 deck.json 的 `meta` 里写 `"animation": "click"` 或 `"auto"` 重跑
 - 预览字体和用户电脑不同：预览用思源黑体代替微软雅黑，版式留了余量，见 `references/fonts.md`
 - 生图失败：自动换程序化插画，`assets/manifest.json` 记录错误，交付时说明哪几页是兜底图
 
