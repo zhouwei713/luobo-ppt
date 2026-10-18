@@ -664,7 +664,7 @@ class Builder:
         # (the kicker then moves up here instead of sitting under the header)
         right = s.get("section") or self.section_of.get(s["n"], "") or s.get("kicker", "")
         y, h = 0.26, 0.3
-        els = [L.T(left, L.MX, y, 6.0, h, 10.5, "primary", True, valign="m", spc=1.5)]
+        els = [L.T(left, L.MX, y, 6.0, h, 10.5, "label", True, valign="m", spc=1.5)]
         if right:
             els.append(L.T(right, CANVAS_W - L.MX - 5.0, y, 5.0, h, 10.5, "highlight", True, align="r", valign="m",
                            spc=1.5))

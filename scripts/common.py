@@ -8,7 +8,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
-SKILL_VERSION = "2.7.1"
+SKILL_VERSION = "2.7.2"
 SKILL_DIR = Path(__file__).resolve().parent.parent
 # bundled icons and gallery: <skill>/assets, or <skill>/scripts/assets in packages whose
 # platform only allows SKILL.md + references/ + scripts/ + templates/ (WorkBuddy)
@@ -176,9 +176,20 @@ class Style:
             if not self.brand.get("tints", False):
                 page = (pal["bg_top"], pal["bg_bottom"])
                 given = {k: hex_clean(v) for k, v in data.get("palette", {}).items()}
+                # text sits on the page and on the light cards: readable on both
+                grounds = tuple(dict.fromkeys(page + (pal["surface"], pal["tint"])))
+                order = {"primary": 0, "secondary": 1, "accent": 2, "extra": 3, "text": 4}
+                by_role = [hex_clean(c["hex"]) for c in sorted(self.brand.get("colors", []),
+                                                                key=lambda c: order.get(c.get("role"), 9))
+                           if c.get("hex") and c.get("role") in order]
                 for k, v in list(pal.items()):
                     need = TEXT_ROLES.get(k, 0)
-                    pal[k] = snap_color(v, self.allowed, page if need else None, need) or pal.get("text", v)
+                    snapped = snap_color(v, self.allowed, grounds if need else None, need)
+                    if need and (snapped is None or snapped != snap_color(v, self.allowed)):
+                        # the nearest colour does not read: go down the manual's own hierarchy
+                        # (primary, secondary, accent...) instead of borrowing a look-alike hue
+                        snapped = next((c for c in by_role if min(contrast(c, g) for g in grounds) >= need), None)
+                    pal[k] = snapped or pal.get("text", v)
                     if k in given and pal[k] != given[k]:
                         self._snapped = getattr(self, "_snapped", []) + [f"{k} #{given[k]} 不在品牌色板里，按 #{pal[k]} 用"]
         self.palette = pal
