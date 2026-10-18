@@ -20,6 +20,9 @@ Checks
              axis titles appear on the chart or the slide = ERROR otherwise
   fine-print notes, sources, unit lines and footnote marks (*, ※, ¹) kept exactly, marks included
              = ERROR otherwise. Both are listed side by side in out/fine_print.md
+  brand-*    with a brand kit (style.json "brand"): a colour outside the manual's palette, a
+             gradient the manual forbids, something inside the logo's clear space or a logo below
+             its minimum size = ERROR; a page without the logo, or brand fonts not installed = WARN
 Writes WORK_DIR/out/qa_report.json. Exit code 1 when any ERROR.
 """
 import argparse
@@ -103,6 +106,126 @@ def sample_bg(path, box):
     if not len(arr):
         return "FFFFFF"
     return rgb_to_hex(arr.mean(0))
+
+
+def installed_fonts():
+    """Font family names on this computer (None when they cannot be listed)."""
+    import os
+    import subprocess
+    try:
+        out = subprocess.run(["fc-list", ":", "family"], capture_output=True, text=True, timeout=20).stdout
+        if out.strip():
+            return {f.strip().lower() for line in out.splitlines() for f in line.split(",")}
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+    dirs = [Path(os.environ.get("WINDIR", "C:/Windows")) / "Fonts",
+            Path(os.environ.get("LOCALAPPDATA", "")) / "Microsoft" / "Windows" / "Fonts",
+            Path.home() / "Library" / "Fonts", Path("/Library/Fonts"), Path("/System/Library/Fonts")]
+    names = set()
+    from PIL import ImageFont
+    for d in dirs:
+        if not d.is_dir():
+            continue
+        for f in d.iterdir():
+            if f.suffix.lower() in (".ttf", ".otf", ".ttc"):
+                try:
+                    fam, sty = ImageFont.truetype(str(f), 12).getname()
+                    names.add(fam.lower())
+                    names.add(f"{fam} {sty}".lower())
+                except Exception:  # noqa: BLE001
+                    names.add(f.stem.lower())
+    return names or None
+
+
+def brand_checks(style, pptx, dump, deck, add):
+    """A brand deck keeps to the manual: only its colours, no gradients when forbidden, the logo
+    with its clear space free and not below its minimum size, and fonts that are installed."""
+    import zipfile
+    from collections import defaultdict
+    b = style.brand
+    allowed = set(style.allowed)
+    where = defaultdict(set)
+    grads = set()
+    with zipfile.ZipFile(pptx) as z:
+        names = {n: n for n in z.namelist()}
+        for n in names:
+            if not n.endswith(".xml") or not (n.startswith("ppt/slides/slide") or n.startswith("ppt/charts/chart")):
+                continue
+            x = z.read(n).decode("utf-8", "ignore")
+            label = n.split("/")[-1]
+            if n.startswith("ppt/slides/slide"):
+                k = int(re.search(r"slide(\d+)\.xml", n).group(1))
+            else:
+                k = 0
+                # a chart belongs to the slide that links it
+                for m_ in names:
+                    if m_.startswith("ppt/slides/_rels/") and label in z.read(m_).decode("utf-8", "ignore"):
+                        k = int(re.search(r"slide(\d+)\.xml", m_).group(1))
+            for c in re.findall(r'srgbClr val="([0-9A-Fa-f]{6})"', x):
+                if c.upper() not in allowed:
+                    where[c.upper()].add(k)
+            if "<a:gradFill" in x:
+                grads.add(k)
+    for c, ks in sorted(where.items()):
+        ns = sorted(ks)
+        add("ERROR", ns[0] if ns else 0, "brand-color",
+            f"用了手册以外的颜色 #{c}（第 {', '.join(map(str, ns))} 页）；色板只有 " + " ".join("#" + a for a in style.allowed))
+    if b.get("forbid", {}).get("gradients", True):
+        # page backgrounds are pictures: a gradient there shows as different top and bottom bands
+        from PIL import Image
+        from common import color_dist
+        seen = {}
+        for sd in dump["slides"]:
+            for e in sd["elements"]:
+                if e.get("role") == "background" and e.get("t") == "image" and Path(e["path"]).exists():
+                    if e["path"] not in seen:
+                        im = Image.open(e["path"]).convert("RGB").resize((64, 36))
+                        top = im.crop((0, 0, 64, 4)).resize((1, 1)).getpixel((0, 0))
+                        bot = im.crop((0, 32, 64, 36)).resize((1, 1)).getpixel((0, 0))
+                        seen[e["path"]] = color_dist("%02X%02X%02X" % top, "%02X%02X%02X" % bot) > 25
+                    if seen[e["path"]]:
+                        grads.add(sd["n"])
+        for k in sorted(grads):
+            add("ERROR", k, "brand-gradient", "手册不用渐变，这一页有渐变（背景或填充）")
+    cfg = b.get("logo", {})
+    min_h = cfg.get("min_height", 0.3)
+    has_logo = bool(b.get("logos"))
+    for sd in dump["slides"]:
+        n = sd["n"]
+        els = sd["elements"]
+        logos = [e for e in els if e.get("role") == "logo" and e.get("t") == "image"]
+        sl = next((x for x in deck["slides"] if x.get("n") == n), {})
+        if has_logo and not logos and sl.get("logo") is not False:
+            add("WARN", n, "brand-logo", "这一页没有放 logo（不要的话在这一页写 \"logo\": false）")
+        for lg in logos:
+            h = lg.get("rh", lg["h"])
+            if h < min_h - 0.005:
+                add("ERROR", n, "brand-logo", f"logo 高 {h:.2f} 英寸，小于手册的最小尺寸 {min_h}")
+            cs = lg.get("clear", 0)
+            x0, y0 = lg.get("rx", lg["x"]), lg.get("ry", lg["y"])
+            box = (x0 - cs, y0 - cs, x0 + lg.get("rw", lg["w"]) + cs, y0 + h + cs)
+            for e in els:
+                if e is lg or e.get("role") in ("background", "logo") or e.get("t") == "chart_bg":
+                    continue
+                ex = (e.get("rx", e["x"]), e.get("ry", e["y"]),
+                      e.get("rx", e["x"]) + e.get("rw", e.get("w", 0)), e.get("ry", e["y"]) + e.get("rh", e.get("h", 0)))
+                if e.get("t") == "text":
+                    lines = str(e.get("text", "")).replace("**", "").split("\n")
+                    lw = min(e["w"], max(text_width_pt(l_, e["size"], e.get("bold", False)) for l_ in lines) / 72)
+                    al = e.get("align", "l")
+                    tx = e["x"] if al == "l" else (e["x"] + e["w"] - lw if al == "r" else e["x"] + (e["w"] - lw) / 2)
+                    ex = (tx, e["y"], tx + lw, e["y"] + e["h"])
+                if rect_inter(box, ex) > 0.002:
+                    what = e.get("text", "")[:16] if e.get("t") == "text" else (Path(e.get("path", "")).name or e["t"])
+                    add("ERROR", n, "brand-logo", f"logo 的安全空间里有别的东西：{what!r}")
+                    break
+    fonts = {v for k, v in style.fonts.items() if v}
+    have = installed_fonts()
+    if have is not None:
+        miss = sorted(f for f in fonts if f.lower() not in have)
+        if miss:
+            add("WARN", 0, "brand-font", "这台电脑没装手册字体 " + "、".join(miss) +
+                "，打开时会被换成别的字体。装上再看一遍，发给别人时提醒对方也装，或者在 PowerPoint 里嵌入字体")
 
 
 def main():
@@ -364,6 +487,9 @@ def main():
         an = dump["slides"][i].get("animation", {}) if i < len(dump["slides"]) else {}
         if an.get("mode") == "click" and an.get("builds", 0) > 6:
             add("WARN", n, "animation", f"这一页要点 {an['builds']} 次才出完，讲的时候容易乱，考虑拆页或改 auto")
+    # ---------------- brand: colours, gradients, logo clear space, fonts (style.json "brand")
+    if getattr(style, "brand", None):
+        brand_checks(style, pptx, dump, deck, add)
     ghost = [f"{sl['n']}. {(sl.get('title') or sl.get('headline') or sl.get('question') or sl.get('quote') or '').replace('**', '')}" for sl in deck["slides"]]
 
     order = {"ERROR": 0, "WARN": 1, "INFO": 2}

@@ -126,6 +126,14 @@ def card(ctx, x, y, w, h, kind="glass"):
     S = ctx.S
     r = S.shape.get("radius", 0.16)
     d = getattr(S, "depth", "shadow")
+    if d == "outline":
+        # sticker look (thick ink edge + hard offset shadow), as in pop / comic brand manuals
+        lw = S.shape.get("outline_w", 2.25)
+        if kind == "primary":
+            return R(x, y, w, h, fill="primary", radius=r, line="line", line_w=lw, shadow="hard")
+        if kind == "tint":
+            return R(x, y, w, h, fill="tint", radius=r, line="line", line_w=lw, shadow="hard")
+        return R(x, y, w, h, fill="surface", radius=r, line="line", line_w=lw, shadow="hard")
     sh = {"shadow": True, "whisper": "soft"}.get(d, False)
     line = None if d in ("flat", "whisper") else "line"
     if kind == "primary":
@@ -147,12 +155,17 @@ def title_block(ctx, s, w=CW, x=MX, y=TITLE_Y):
         els.append(k)
     if not title:
         return els, y
+    bar = ctx.S.decor.get("title_mark") == "bar"
+    if bar:
+        # a brand's title bar: a short vertical stripe in the accent colour left of the title
+        els.append(R(x, y + 0.14, 0.09, 0.52, fill=ctx.S.decor.get("title_bar_color", "accent"), radius=0.03))
+        x, w = x + 0.27, w - 0.27
     size = fit_size(title, w, 0.8, 36, 24, bold=True, max_lines=1)
     t = T(title, x, y, w, 0.8, size, "text", True, "heading", valign="m")
     t["dgrp"] = "title"  # unified across the deck in build_deck
     els.append(t)
     bottom = y + 0.8
-    if ctx.S.decor.get("title_mark", True):
+    if ctx.S.decor.get("title_mark", True) and not bar:
         els.append(R(x, bottom + 0.06, 0.62, 0.08, fill="primary", radius=0.04))
         els.append(R(x + 0.7, bottom + 0.06, 0.14, 0.08, fill="primary@0.4", radius=0.04))
         bottom += 0.14

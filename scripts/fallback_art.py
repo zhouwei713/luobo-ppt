@@ -57,6 +57,9 @@ def background(style, w=1920, h=1080, variant="content", seed=7):
         top, bottom = P["primary_dark"], P["primary"]
     else:
         top, bottom = P["bg_top"], P["bg_bottom"]
+    if bgcfg.get("flat"):
+        # brand manuals that forbid gradients: one flat colour
+        top = bottom = P["primary"] if closing_dark else P["bg_top"]
     base = vgradient(w, h, top, bottom).convert("RGBA")
     if variant == "cover":
         decor = bgcfg.get("cover_decor", ["blobs", "clouds", "hills"])

@@ -8,7 +8,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
-SKILL_VERSION = "2.6.3"
+SKILL_VERSION = "2.7.0"
 SKILL_DIR = Path(__file__).resolve().parent.parent
 # bundled icons and gallery: <skill>/assets, or <skill>/scripts/assets in packages whose
 # platform only allows SKILL.md + references/ + scripts/ + templates/ (WorkBuddy)
@@ -78,6 +78,36 @@ def contrast(h1, h2):
     return (l1 + 0.05) / (l2 + 0.05)
 
 
+# minimum contrast on the page for colours used as text (big numbers and headlines are large text)
+TEXT_ROLES = {"text": 4.5, "muted": 4.5, "subtle": 4.5, "secondary": 4.5, "label": 4.5, "strong": 3.0, "highlight": 3.0}
+
+
+def brand_allowed(brand):
+    """The colours a brand kit lets onto a page: its palette plus the extra neutrals it allows."""
+    out = [hex_clean(c["hex"]) for c in brand.get("colors", []) if c.get("hex")]
+    out += [hex_clean(c) for c in brand.get("allow", [])]
+    return list(dict.fromkeys(out))
+
+
+def color_dist(a, b):
+    """Perceptual-ish distance ("redmean" weighted RGB)."""
+    r1, g1, b1 = hex_to_rgb(a)
+    r2, g2, b2 = hex_to_rgb(b)
+    rm = (r1 + r2) / 2
+    return (((512 + rm) * (r1 - r2) ** 2) / 256 + 4 * (g1 - g2) ** 2 + ((767 - rm) * (b1 - b2) ** 2) / 256) ** 0.5
+
+
+def snap_color(c, allowed, page=None, need=0.0):
+    """Nearest allowed colour; with `page` (background colours) only ones reading at `need`:1."""
+    c = hex_clean(c)
+    if not allowed:
+        return c
+    cands = [a for a in allowed if not page or min(contrast(a, p) for p in page) >= need] if need else list(allowed)
+    if not cands:
+        return None
+    return min(cands, key=lambda a: color_dist(a, c))
+
+
 class Style:
     """Wraps style.json; resolves color tokens like 'primary' or '#AABBCC'."""
 
@@ -137,7 +167,22 @@ class Style:
                     break
                 c = mix(c0, pal["text"], k / 20)
             pal["label"] = c
+        self.brand = data.get("brand") or None
+        if self.brand:
+            # a brand kit: every colour on the page comes from the manual's palette. Derived roles
+            # (muted grey, label blue, light tints) are snapped to the nearest brand colour, text
+            # roles only to brand colours that stay readable on the page
+            self.allowed = brand_allowed(self.brand)
+            if not self.brand.get("tints", False):
+                page = (pal["bg_top"], pal["bg_bottom"])
+                given = {k: hex_clean(v) for k, v in data.get("palette", {}).items()}
+                for k, v in list(pal.items()):
+                    need = TEXT_ROLES.get(k, 0)
+                    pal[k] = snap_color(v, self.allowed, page if need else None, need) or pal.get("text", v)
+                    if k in given and pal[k] != given[k]:
+                        self._snapped = getattr(self, "_snapped", []) + [f"{k} #{given[k]} 不在品牌色板里，按 #{pal[k]} 用"]
         self.palette = pal
+        self.fixes += getattr(self, "_snapped", [])
         sh = data.get("shape", {})
         # depth: flat (no edge) | ring (1px line) | whisper (very soft halo) | shadow (classic drop)
         self.depth = sh.get("depth") or ("shadow" if sh.get("shadow", True) else "ring")
@@ -170,8 +215,36 @@ class Style:
         m = re.fullmatch(r"(\w+)@([0-9.]+)", t)
         if m and m.group(1) in self.palette:
             base = self.palette["bg_bottom"] if getattr(self, "dark", False) else "FFFFFF"
-            return mix(base, self.palette[m.group(1)], float(m.group(2)))
+            c = mix(base, self.palette[m.group(1)], float(m.group(2)))
+            if self.brand and not self.brand.get("tints", False):
+                # a light wash (under 0.3) stays a light brand colour; anything stronger is a
+                # fill that has to show on the page, so the page colours are not candidates
+                if float(m.group(2)) < 0.3:
+                    c = snap_color(c, self.allowed)
+                else:
+                    page = {self.palette["bg_top"], self.palette["bg_bottom"], self.palette["surface"]}
+                    c = snap_color(c, [a for a in self.allowed if a not in page] or self.allowed)
+            return c
         return self.palette.get(default, "333333")
+
+    def brand_series(self):
+        """Chart series colours for a brand deck: the brand colours that read on the card,
+        primary first, then the rest by contrast (a pale yellow line on white comes last)."""
+        if not self.brand:
+            return None
+        surf = self.palette["surface"]
+        order = {"primary": 0, "secondary": 1, "accent": 2, "extra": 3}
+        cols = []
+        for x in sorted(self.brand.get("colors", []), key=lambda x: order.get(x.get("role"), 9)):
+            c = hex_clean(x["hex"])
+            if x.get("role") in ("background", "neutral") or c in cols or c in (surf, self.palette["bg_top"]):
+                continue
+            cols.append(c)
+        if not cols:
+            return [self.palette["primary"]]
+        # the manual's order (primary, secondary, accent, extra), with colours that barely show on
+        # the card (a light yellow on white) moved to the end
+        return [c for c in cols if contrast(c, surf) >= 1.6] + [c for c in cols if contrast(c, surf) < 1.6]
 
 
 def load_style(path):

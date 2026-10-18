@@ -212,6 +212,24 @@ def small_slot(work, aid):
     return bool(fn) and "corner_hero(ctx" in inspect.getsource(fn)
 
 
+def fit_art(im, size, margin=0.04):
+    """Brand artwork (a mascot, a sticker, a cut-out logo): the whole picture, never cropped,
+    centred in the slot on a transparent canvas. No rounding, no shadow, no tint: a brand manual
+    forbids changing its characters."""
+    from PIL import Image
+    im = im.convert("RGBA")
+    bb = im.getbbox()
+    if bb:
+        im = im.crop(bb)
+    W, H = int(size[0]), int(size[1])
+    m = round(min(W, H) * margin)
+    k = min((W - 2 * m) / im.width, (H - 2 * m) / im.height)
+    im = im.resize((max(1, round(im.width * k)), max(1, round(im.height * k))), Image.LANCZOS)
+    out = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    out.paste(im, ((W - im.width) // 2, (H - im.height) // 2), im)
+    return out
+
+
 def fit_photo(im, size, radius_frac=0.06, tint=0.0, tint_color=None, focus=(0.5, 0.42), margin=0.06, shadow=True):
     """Crop to the slot's aspect around `focus` (fractions; a little above centre suits most
     photos), scale to the slot, round the corners, optionally wash toward a palette colour."""
@@ -269,7 +287,7 @@ def place(work, aid, im, record, tint=0.0, focus=(0.5, 0.42)):
         radius = 0.0 if r_in == 0 else 0.06
         tint_color = _hex_rgb(st.palette["primary"])
     src_w, src_h = record.pop("_src_size", None) or im.size
-    out = fit_photo(im, size, radius, tint, tint_color, focus)
+    out = fit_art(im, size) if record.get("method") == "brand" else fit_photo(im, size, radius, tint, tint_color, focus)
     adir = work / "assets"
     adir.mkdir(parents=True, exist_ok=True)
     path = adir / f"{aid}.png"
@@ -423,7 +441,7 @@ def cmd_local(a, cfg):
     src = Path(a.file).expanduser()
     if not src.exists():
         raise SystemExit(f"no such file {src}")
-    rec = {"method": "user", "source_file": str(src)}
+    rec = {"method": "brand" if a.art else "user", "source_file": str(src)}
     if a.credit:
         c = json.loads(Path(a.credit).read_text(encoding="utf-8"))
         lic = (c.get("license") or "").lower()
@@ -474,6 +492,8 @@ def main():
         p.add_argument("n" if name == "pick" else "file", type=int if name == "pick" else str)
         if name == "local":
             p.add_argument("--credit", help="json with source, author, page, license (and width, height of the original)")
+            p.add_argument("--art", action="store_true",
+                           help="brand artwork (mascot, sticker): placed whole, never cropped, no frame or shadow")
         p.add_argument("--tint", type=float, default=0.0, help="0..0.3, wash toward the primary colour")
         p.add_argument("--focus", type=float, nargs=2, default=[0.5, 0.42], metavar=("X", "Y"),
                        help="where to keep when cropping, as fractions of width and height")
