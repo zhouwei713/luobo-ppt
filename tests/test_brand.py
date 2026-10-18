@@ -117,7 +117,21 @@ class LightPrimaryTests(unittest.TestCase):
         self.assertEqual(S.palette["primary"], "F97316")
         for k in ("highlight", "label", "strong"):
             self.assertEqual(S.palette[k], "14306B", k)
-        self.assertEqual((S.palette["primary_dark"], S.palette["on_dark"]), ("14306B", "FFFFFF"))
+        self.assertEqual(S.palette["primary_dark"], "14306B")
+        # dark ink reads on orange, so the closing page stays orange with dark text
+        self.assertEqual((S.palette["closing"], S.palette["on_dark"]), ("F97316", "1F2937"))
+
+    def test_pale_yellow_primary(self):
+        sys.path.insert(0, str(SCRIPTS))
+        import brand_kit as BK
+        b = {"name": "x", "allow": [], "colors": [
+            {"hex": "FFE600", "role": "primary"}, {"hex": "1E6BFF", "role": "secondary"},
+            {"hex": "FF5A52", "role": "accent"}, {"hex": "111111", "role": "text"},
+            {"hex": "FFFFFF", "role": "neutral"}]}
+        S = Style(BK.build_style(tempfile.gettempdir(), b))
+        self.assertEqual(S.palette["tint"], "FFE600")  # labels sit on the yellow
+        self.assertEqual(S.palette["on_primary"], "111111")
+        self.assertEqual(S.palette["highlight"], "1E6BFF")
 
 
 class BrandKitTests(unittest.TestCase):

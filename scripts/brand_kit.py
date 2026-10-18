@@ -299,14 +299,17 @@ def build_style(work, b, base=None):
     text = (by_role(b, "text") or [None])[0] or min([h for h in allowed if contrast(h, page) >= 7] or ["111111"], key=rel_lum)
     lights = [h for h in by_role(b, "background") + by_role(b, "neutral") if rel_lum(h) > 0.7 and h != page]
     tint = lights[0] if lights else page
-    if tint == page and rel_lum(accent) > 0.6:
+    if tint == page and rel_lum(primary) > 0.6:
+        tint = primary  # a pale primary (a pop yellow) is the label and highlight ground
+    elif tint == page and rel_lum(accent) > 0.6:
         # no light grey in the manual but a light accent (a pop yellow): emphasis cards and
         # labels sit on the accent with dark text, the way such manuals do it
         tint = accent
     sig = b.get("signature", {})
     outline = bool(sig.get("outline"))
     forbid = b.get("forbid", {})
-    on_primary = "FFFFFF" if ("FFFFFF" in allowed and contrast("FFFFFF", primary) >= 3) else text
+    # text on primary fills is often small (card descriptions): white only where it reads at 4.5:1
+    on_primary = "FFFFFF" if ("FFFFFF" in allowed and contrast("FFFFFF", primary) >= 4.5) else text
     # cards: on a white page a flat white card disappears, so a light brand grey carries them
     # (most manuals lay their own pages out this way); outlined cards stay white
     surface = "FFFFFF" if "FFFFFF" in allowed else page
@@ -321,7 +324,16 @@ def build_style(work, b, base=None):
     pal = {"primary": primary, "primary_dark": dark, "accent": accent, "bg_top": page, "bg_bottom": page,
            "surface": surface, "tint": tint, "text": text, "muted": text,
            "on_primary": on_primary, "line": text if outline else tint,
-           "on_dark": "FFFFFF" if ("FFFFFF" in allowed and contrast("FFFFFF", dark) >= 4.5) else text}
+           }
+    # the closing page sits on the primary whenever some brand ink reads on it (an orange or a
+    # yellow with dark text), so a light-primary deck still ends in its own colour
+    white_ok = "FFFFFF" in allowed
+    if (white_ok and contrast("FFFFFF", primary) >= 4.5) or contrast(text, primary) >= 4.5:
+        closing = primary
+    else:
+        closing = dark
+    pal["closing"] = closing
+    pal["on_dark"] = "FFFFFF" if (white_ok and contrast("FFFFFF", closing) >= 4.5) else text
     style = load_json(style_file(base)) if base else {}
     fonts = {"heading_ea": "Microsoft YaHei", "body_ea": "Microsoft YaHei", "heading_latin": "Arial",
              "body_latin": "Arial", "display_latin": "Arial Black"}

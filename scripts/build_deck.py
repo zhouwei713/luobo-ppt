@@ -233,7 +233,14 @@ class Builder:
         c = slide.shapes.add_connector(MSO_CONNECTOR.STRAIGHT, self.E(e["x1"]), self.E(e["y1"]),
                                        self.E(e["x2"]), self.E(e["y2"]))
         self._strip_style(c)
-        c.line.color.rgb = RGBColor.from_string(self.S.c(e.get("color", "line")))
+        col = self.S.c(e.get("color", "line"))
+        if self.S.brand and e.get("lw", 1.5) >= 1.0:
+            # a connector in a pale brand colour (a pop yellow on white) vanishes: a structural
+            # line takes the brand's dark colour instead
+            from common import contrast
+            if contrast(col, self.S.c("bg_top")) < 1.5:
+                col = self.S.c("primary_dark")
+        c.line.color.rgb = RGBColor.from_string(col)
         c.line.width = self.pt(e.get("lw", 1.5))
         if e.get("dash"):
             from pptx.enum.dml import MSO_LINE_DASH_STYLE
@@ -648,7 +655,8 @@ class Builder:
                         "role": "background"})
         else:
             els.append({"t": "rect", "x": 0, "y": 0, "w": CANVAS_W, "h": CANVAS_H,
-                        "fill": "primary_dark" if m == "closing" else "bg_bottom", "role": "background"})
+                        "fill": ("closing" if "closing" in self.S.palette else "primary_dark") if m == "closing"
+                        else "bg_bottom", "role": "background"})
         return els
 
     def brand_header(self, s, m):
