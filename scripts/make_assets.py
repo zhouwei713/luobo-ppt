@@ -233,10 +233,14 @@ def main():
     placed -= only or set()
 
     # a brand kit's mascots and stickers fill the picture slots, whole and uncropped
-    art = [f for f in ((style.brand or {}).get("art") or []) if Path(f).exists()] if getattr(style, "brand", None) else []
+    art = [a if isinstance(a, str) else a.get("file") for a in ((style.brand or {}).get("art") or [])] \
+        if getattr(style, "brand", None) else []
+    art = [f for f in art if f and Path(f).exists()]
     art_of = {}
     for i, (asset, _) in enumerate([t for t in todo if t[0]["kind"] == "hero"]):
-        if art:
+        if asset.get("art") and Path(asset["art"]).exists():
+            art_of[asset["id"]] = asset["art"]  # chosen by plan_deck for this page
+        elif art:
             art_of[asset["id"]] = art[i % len(art)]
 
     def work_one(item):

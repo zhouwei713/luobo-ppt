@@ -35,6 +35,7 @@ VALIGN = {"t": MSO_ANCHOR.TOP, "m": MSO_ANCHOR.MIDDLE, "b": MSO_ANCHOR.BOTTOM}
 
 class Builder:
     def __init__(self, work, style, meta, assets, slide_w_in, slide_h_in):
+        self.section_of = {}
         self.work = Path(work)
         self.S = style
         self.meta = meta
@@ -650,6 +651,29 @@ class Builder:
                         "fill": "primary_dark" if m == "closing" else "bg_bottom", "role": "background"})
         return els
 
+    def brand_header(self, s, m):
+        """A brand manual's running header on content pages, instead of a logo picture:
+        the brand name in small caps on the left, the chapter on the right, a hairline under
+        both (brand.json logo.content = "header")."""
+        b = self.S.brand or {}
+        cfg = b.get("logo", {})
+        if m != "content" or cfg.get("content") != "header" or s.get("logo") is False:
+            return []
+        left = cfg.get("header_text") or b.get("name", "")
+        # the right side names where we are: the chapter, else the page's own small label
+        # (the kicker then moves up here instead of sitting under the header)
+        right = s.get("section") or self.section_of.get(s["n"], "") or s.get("kicker", "")
+        y, h = 0.26, 0.3
+        els = [L.T(left, L.MX, y, 6.0, h, 10.5, "primary", True, valign="m", spc=1.5)]
+        if right:
+            els.append(L.T(right, CANVAS_W - L.MX - 5.0, y, 5.0, h, 10.5, "highlight", True, align="r", valign="m",
+                           spc=1.5))
+        rule = "tint" if contrast_ok_line(self.S.c("tint"), self.S.c("bg_top")) else "primary"
+        els.append(L.LN(L.MX, y + h + 0.06, CANVAS_W - L.MX, y + h + 0.06, rule, 0.5))
+        for e in els:
+            e.update(role="chrome", brand_header=True)
+        return els
+
     def chrome(self, s, info, plan_slide):
         """Header + bottom pill/footer drawn above the layout."""
         els = []
@@ -657,7 +681,9 @@ class Builder:
         series = self.meta.get("series")
         if self.S.decor.get("chrome") == "editorial":
             return self._chrome_editorial(s, info, plan_slide)
-        if m == "content" and series and info.get("header", True) and self.S.decor.get("header", True):
+        bh = self.brand_header(s, m)
+        els += bh
+        if m == "content" and not bh and series and info.get("header", True) and self.S.decor.get("header", True):
             size = 14
             tw = text_width_pt(series, size, True) / 72 + len(series) * 0.035
             x = (CANVAS_W - tw) / 2
@@ -680,6 +706,8 @@ class Builder:
             sw_ = min(L.CW, max(6.4, text_width_pt(src_txt, 10.5) / 72 + 0.6))
             els.append(L.T(src_txt, CANVAS_W / 2 - sw_ / 2, yb, sw_, 0.26, 10.5, "subtle", align="c", valign="m"))
         footer = self.meta.get("footer", "") if s.get("show_footer", m == "content") else ""
+        if bh:
+            footer = ""  # the brand header already names the brand on this page
         meta_txt = "  ·  ".join([t for t in (footer, page) if t])
         tk = s.get("takeaway")
         if tk and not info.get("uses_takeaway"):
@@ -795,6 +823,8 @@ def place_logo(style, s, master, els):
         return []
     cfg = b.get("logo", {})
     m = "content" if master not in ("cover", "closing") else master
+    if m == "content" and cfg.get("content") == "header":
+        return []  # a text header carries the brand on content pages
     pref = s.get("logo") if isinstance(s.get("logo"), str) else cfg.get(f"{m}_position") or \
         {"cover": "top-left", "closing": "top-center"}.get(m, cfg.get("content", "top-right"))
     if pref == "none":
@@ -876,6 +906,12 @@ def place_logo(style, s, master, els):
 
 # a source line that already carries its own label ("数据来源：", "资料来源", "Source:") is not prefixed again
 SOURCE_LABEL = re.compile(r"^\s*(数据|资料|图片|信息)?(来源|出处)|^\s*(source|data|via)\b", re.I)
+
+
+def contrast_ok_line(c, page):
+    """A hairline in c shows on the page (a near-white grey on white does not)."""
+    from common import contrast
+    return contrast(c, page) >= 1.25
 
 
 def contrast_ok_dark(c, surface):
@@ -968,6 +1004,12 @@ def main():
                 s["number"] = f"{k:02d}"
             secs.append({"number": s.get("number"), "title": s.get("title", ""), "text": s.get("subtitle", "")})
     meta_ctx["_sections"] = secs
+    # the chapter each page belongs to (for a brand header): the last section page before it
+    b.section_of, cur = {}, ""
+    for s in deck["slides"]:
+        if s.get("type") == "section" or plan_by_n.get(s["n"], {}).get("layout") == "section":
+            cur = s.get("title", "")
+        b.section_of[s["n"]] = s.get("section") or cur
     built = []
     for s in deck["slides"]:
         ps = plan_by_n.get(s["n"], {})
@@ -1023,6 +1065,8 @@ def main():
         chrome = b.chrome(s, info, ps)
         for e in chrome:
             e.setdefault("role", "chrome")
+        if any(e.get("brand_header") for e in chrome) and not (s.get("section") or b.section_of.get(s["n"])):
+            els = [e for e in els if e.get("grp") != "kicker"]  # the kicker went up into the header
         all_els = b.master(s, info, ps) + els + chrome
         if style.brand:
             all_els += place_logo(style, s, info.get("master", "content"), all_els)

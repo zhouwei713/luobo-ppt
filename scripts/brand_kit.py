@@ -269,7 +269,8 @@ def cmd_check(a):
             errs.append(f"logo {lg.get('file')} 的 on 要写 light、dark 或 any（放在浅底还是深底上）")
     if not b.get("logos"):
         warns.append("没有 logo，成品不会放标志")
-    for f in b.get("art", []):
+    for a in b.get("art", []):
+        f = a.get("file", "") if isinstance(a, dict) else a
         if not (work / f).exists():
             errs.append(f"art 文件不存在：{f}")
     share = find_in_pages(work, [hex_clean(c["hex"]) for c in cols if c.get("hex")]) if not errs else {}
@@ -342,7 +343,8 @@ def build_style(work, b, base=None):
     bb = json.loads(json.dumps(b))
     for lg in bb.get("logos", []):
         lg["file"] = str((work / lg["file"]).resolve())
-    bb["art"] = [str((work / f).resolve()) for f in bb.get("art", [])]
+    bb["art"] = [dict(a, file=str((work / a["file"]).resolve())) if isinstance(a, dict) else str((work / a).resolve())
+                 for a in bb.get("art", [])]
     style["brand"] = bb
     return style
 
@@ -421,8 +423,8 @@ def cmd_card(a):
         x += 740
     y += 250
     x = 48
-    for fpath in b.get("art", [])[:10]:
-        p = work / fpath
+    for a in b.get("art", [])[:10]:
+        p = work / (a.get("file", "") if isinstance(a, dict) else a)
         if p.exists():
             lo = Image.open(p).convert("RGBA")
             lo.thumbnail((130, 130))

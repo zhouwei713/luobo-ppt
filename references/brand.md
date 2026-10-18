@@ -54,13 +54,15 @@ python3 $S/brand_kit.py apply $W                   # 写 style.json 和 brand/br
 | `logo.clear_space` | 安全空间，按 logo 高度的倍数。手册写"四周留字高 X"或"直径 1/4"时换算成这个比例 |
 | `logo.height` | 内容页 logo 的高度（英寸），封面和结尾页会放大 |
 | `logo.min_height` | 手册的最小尺寸换成英寸，屏幕 32px 约 0.33 英寸 |
-| `logo.content` | 内容页放哪：top-right、top-left、bottom-right、bottom-left、none |
+| `logo.content` | 内容页放哪：top-right、top-left、bottom-right、bottom-left、none，或者 header。很多手册内页不放 logo 图形，顶上是一行小字页眉（品牌名在左、栏目名在右、下面一条细线），这种就写 header，图形 logo 只放封面和封底 |
+| `logo.header_text` | header 模式左边那行字，比如"周萝卜 ZHOULUOBO"，不写就用 name。右边自动放章节名，没有章节就放这一页的 kicker |
 | `logo.cover` / `logo.closing` | 封面、结尾页用哪种 logo：vertical、horizontal |
 | `signature.title_bar` | 标题左侧的竖条，写颜色（accent、primary 或色值），手册没有就不写 |
 | `signature.title_mark` | 平时标题下方的两段短横，手册没有就保持 false |
 | `signature.outline` | true 时卡片是粗描边加硬投影（贴纸感），`outline_w` 描边粗细（磅），`hard_shadow` 投影偏移（英寸） |
 | `signature.radius` | 卡片圆角（英寸） |
-| `art` | IP 形象、表情贴纸、辅助图形，会按顺序放进插画位，整张放不裁切 |
+| `art` | IP 形象、表情贴纸、辅助图形。可以只写文件名，也可以写 {file, mood}，mood 是这个动作的意思，比如 wave、love、question、like |
+| `art_max` | 内容页最多出现几次形象，默认 4。封面、章节页、结尾页不算 |
 | `forbid.gradients` | 不许渐变（默认 true）：背景和结尾页都是纯色 |
 | `forbid.shadows` | 不许阴影（默认 true）：卡片是平的。outline 风格的硬投影不受影响 |
 | `rules` | 手册里其他的规矩，原话写进来，排版时遵守 |
@@ -69,6 +71,7 @@ python3 $S/brand_kit.py apply $W                   # 写 style.json 和 brand/br
 
 - **颜色**：风格需要的十几个颜色位（主色、强调色、正文、浅灰小字、标签色……）全部从色板里选。用作文字的只选在页面上读得清的颜色。版式里用到的"主色的浅色"会吸附到最近的品牌色，浅底上的大片卡片用手册的浅灰。手改 style.json 填了色板以外的颜色，会吸附到最近的品牌色，并在 build 时提示。
 - **图表**：系列按手册顺序用品牌色，不用浅色调；突出某一根柱子时用强调色；读不清的颜色（白底上的亮黄）排到最后，线尾数字读不清时换成正文色；描边风格下网格线用浅灰或不画。
+- **形象**：只出现在封面、章节页、结尾页，以及 deck.json 里写了 `"art": true` 或 `"art": "question"` 的页（按 mood 挑对应的动作），整张放不裁切，不压内容。数据页、列表页默认不放，写 `"art": false` 也能关掉。每页都放一个形象等于没放，观众第三页就不看了
 - **logo**：每页按 `logo.content` 放，安全空间里有插画就把插画往下挪，有文字就换一个角。底色深就换反白版，没有反白版就用 `plate` 做的白底版。
 - **背景**：纯色，不画装饰斑点和渐变。
 

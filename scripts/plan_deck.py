@@ -154,7 +154,22 @@ def main():
         style_prefs = _st.get("prefer_layouts", {})
         style_skip = set((_st.get("illustration") or {}).get("skip_layouts", []))
     except Exception:
-        style_prefs, style_skip = {}, set()
+        _st, style_prefs, style_skip = {}, {}, set()
+    # a brand's mascot is not wallpaper: it shows on the cover, section and closing pages and
+    # on pages that ask for it ("art": true or a mood such as "question"), large, a few times
+    brand = _st.get("brand") or {}
+    arts = [a if isinstance(a, dict) else {"file": a} for a in brand.get("art", [])]
+    art_max = brand.get("art_max", 4)
+    BIG = ("cover_hero", "cover_center", "cover_type", "section", "closing")
+    art_used = []
+
+    def pick_art(asked):
+        if isinstance(asked, str):
+            for a in arts:
+                if asked in (a.get("mood"), Path(a["file"]).stem, a["file"]) or asked in (a.get("moods") or []):
+                    return a["file"]
+        fresh = [a["file"] for a in arts if a["file"] not in art_used]
+        return (fresh or [a["file"] for a in arts])[0]
     assets += [{"id": "bg_content", "kind": "background", "variant": "content"},
                {"id": "bg_cover", "kind": "background", "variant": "cover"},
                {"id": "bg_closing", "kind": "background", "variant": "closing"},
@@ -205,6 +220,16 @@ def main():
         want = slot and (a.level == "full" or (a.level == "standard" and (slot in ("large", "top") or layout == "cover_hero")))
         if layout in style_skip:
             want = False  # the style lets typography carry these pages
+        asked = s.get("art")
+        if arts:
+            if asked is False:
+                want = False
+            elif asked:
+                want = bool(slot)
+            else:
+                want = bool(slot) and layout in BIG
+            if want and layout not in BIG and len(art_used) >= art_max:
+                want = False
         if want:
             hid = f"hero_{s['n']:02d}"
             idea, scene = HERO_IDEAS.get(layout, HERO_IDEAS["list_icons"])
@@ -213,6 +238,9 @@ def main():
                            "prompt": idea.format(anchor=anchor, topic=topic),
                            "fallback": {"scene": scene, "glyph": glyph if scene == "tile" else None}})
             ps["hero"] = hid
+            if arts:
+                assets[-1]["art"] = pick_art(asked)
+                art_used.append(assets[-1]["art"])
         slides.append(ps)
     if a.sheets:
         small = [x for x in assets if x["kind"] == "hero" and x["size"][1] <= 900]

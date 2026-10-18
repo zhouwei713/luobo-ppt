@@ -203,5 +203,43 @@ class BrandKitTests(unittest.TestCase):
                 self.assertTrue(any(e["check"].startswith("brand") for e in errs), (name, errs))
 
 
+class HeaderAndArtTests(BrandKitTests):
+    """A manual whose inner pages carry a text header, and a mascot used on purpose."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        b = brand_json(cls.w)
+        b["logo"].update(content="header", header_text="测试品牌 TEST")
+        b["art"] = [{"file": "brand/mascot.png", "mood": "wave"}, {"file": "brand/logo.png", "mood": "question"}]
+        (cls.w / "brand.json").write_text(json.dumps(b, ensure_ascii=False), encoding="utf-8")
+        r = run_script("brand_kit.py", "apply", cls.w)
+        assert r.returncode == 0, r.stdout + r.stderr
+
+    def test_brand_deck_keeps_to_the_manual(self):
+        deck = json.loads(json.dumps(DECK))
+        deck["slides"][1]["kicker"] = "01 · 三件事"
+        deck["slides"].insert(2, {"n": 3, "type": "list", "title": "问题来了", "art": "question",
+                                  "items": [{"title": "甲", "text": "第一问"}, {"title": "乙", "text": "第二问"}]})
+        for i, sl in enumerate(deck["slides"]):
+            sl["n"] = i + 1
+        w, errs, dump = self.build(deck)
+        self.assertEqual([e for e in errs if e["check"].startswith("brand")], [])
+        s2 = dump["slides"][1]["elements"]
+        self.assertTrue(any(e.get("brand_header") and e.get("text") == "测试品牌 TEST" for e in s2))
+        self.assertTrue(any(e.get("brand_header") and e.get("text") == "01 · 三件事" for e in s2))
+        self.assertFalse(any(e.get("grp") == "kicker" for e in s2))  # the kicker moved up
+        self.assertFalse(any(e.get("role") == "logo" for e in s2))  # no logo picture inside
+        plan = json.loads((w / "plan.json").read_text(encoding="utf-8"))
+        heroes = {p["n"]: p.get("hero") for p in plan["slides"]}
+        self.assertIsNone(heroes[2])  # a list page that did not ask: no mascot
+        art = {a["slide"]: a.get("art") for a in plan["assets"] if a["kind"] == "hero"}
+        self.assertTrue(art[1].endswith("mascot.png"))  # the cover gets the first one
+        self.assertTrue(art[3].endswith("logo.png"))  # "question" picked by mood
+
+    test_quiet_brand_breaks_are_errors = None
+    test_logo_steps_around_a_sticker = None
+
+
 if __name__ == "__main__":
     unittest.main()
