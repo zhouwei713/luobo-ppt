@@ -1653,6 +1653,7 @@ def closing(s, ctx):
     dark = ctx.S.decor.get("closing_dark", True)
     # text on the dark closing ground (a brand with a light primary closes on its darkest colour)
     on = ("on_dark" if "on_dark" in ctx.S.palette else "on_primary") if dark else "strong"
+    soft = ("on_dark" if "on_dark" in ctx.S.palette else "primary@0.18") if dark else None
     els = []
     hero = ctx.asset("hero")
     y = 0.7
@@ -1663,7 +1664,7 @@ def closing(s, ctx):
         y = 2.2
     head = s.get("headline") or s.get("title", "")
     if s.get("kicker"):
-        els.append(T(s["kicker"], MX, y, CW, 0.4, 14, "primary@0.18" if dark else "highlight", True, "body",
+        els.append(T(s["kicker"], MX, y, CW, 0.4, 14, soft if dark else "highlight", True, "body",
                      align="c", valign="m", spc=2))
         y += 0.5
     els.append(T(head, MX, y, CW, 0.95, fit_size(head, CW, 0.95, 46, 26, bold=True, max_lines=1), on, True, "heading",
@@ -1671,7 +1672,7 @@ def closing(s, ctx):
     y += 1.05
     if s.get("body"):
         els.append(T(s["body"], MX + 1, y, CW - 2, 0.6, body_size(s["body"], CW - 2, 0.6, 19, 12),
-                     "primary@0.18" if dark else "muted", align="c", valign="m"))
+                     soft if dark else "muted", align="c", valign="m"))
         y += 0.95
     if s.get("cta"):
         from common import text_width_pt

@@ -418,6 +418,19 @@ def main():
             if cr < need:
                 add("WARN", n, "contrast", f"{t['text'][:24]!r} contrast {cr:.1f} < {need} (text #{style.c(t['color'])} on #{col})")
 
+    # ---------------- structural lines that vanish into the page (a pale yellow connector on white)
+    for sd in dump["slides"]:
+        bgc = style.c("bg_top")
+        for e in sd["elements"]:
+            if e.get("t") == "line" and e.get("lw", 1.5) >= 1.0 and e.get("role") not in ("decor", "background") \
+                    and sd.get("master", "content") == "content":
+                col = style.c(e.get("color", "line"))
+                if style.brand and contrast(col, bgc) < 1.5:
+                    col = style.c("primary_dark")  # what build_deck draws instead
+                if contrast(col, bgc) < 1.25:
+                    add("WARN", sd["n"], "contrast", f"连接线 #{col} 在底色 #{bgc} 上几乎看不见")
+                    break
+
     # ---------------- rail: content stays above the takeaway pill / footer row
     for sd in dump["slides"]:
         if sd.get("master", "content") != "content":
