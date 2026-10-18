@@ -60,7 +60,7 @@ VI 手册规定的是精确色值、字体、logo 的用法和安全空间。拿
 2. **读手册写 brand.json**：把 `brand.draft.json` 填好另存为 `$W/brand.json`。色值一律抄手册上印的数字，不从图上取色；每个颜色标 role（primary、secondary、accent、extra、text、background、neutral）。字体、logo 安全空间和最小尺寸、标志性元素（标题竖条、粗描边加硬投影）、禁用项、IP 形象和辅助图形都照手册写。logo 和形象用 `brand_kit.py crop $W 页面.png x0 y0 x1 y1 名字 --clear` 从页面上截下来（白底变透明）；手册没有深底用的反白 logo 时，`brand_kit.py plate` 做一个白底版。手册对形象有限制的（比如"只用于运营活动"），写进 rules 并照办。
 3. **核对** `python3 $S/brand_kit.py check $W`，每个色值会回到手册页面上找，一个像素都找不到的多半读错了，回去再看。
 4. **生成风格** `python3 $S/brand_kit.py apply $W`，写出 `style.json` 和 `brand/brand_card.png`。把品牌卡发给用户确认颜色、字体和 logo，代替风格卡。
-5. 回到原来的路线继续，跳过读参考图和挑风格。logo 每页自动放在手册要求的位置并留出安全空间，不要再写进 `stamps`；某页不要 logo 就在这页写 `"logo": false`。品牌套件里的 IP 形象和贴纸会自动放进插画位，整张放、不裁切。
+5. 回到原来的路线继续，跳过读参考图和挑风格。logo 每页自动放在手册要求的位置并留出安全空间，不要再写进 `stamps`；某页不要 logo 就在这页写 `"logo": false`。手册内页用文字页眉、不放 logo 图形的，`logo.content` 写 header。IP 形象只放封面、章节页、结尾页和需要情绪的页：在那一页写 `"art": "question"` 这类动作名（brand.json 里给每个形象标 mood），一份稿子内容页最多出现四次，整张放、不裁切。数据页、列表页不放形象。
 6. QA 多出一组 brand 检查：手册以外的颜色、手册不许的渐变、logo 安全空间里有别的东西、logo 小于最小尺寸都是 ERROR。手册字体没装是 WARN，要告诉用户装上，或者发给别人前在 PowerPoint 里嵌入字体。
 
 ## 版式、出图与检查（两条路线共用）

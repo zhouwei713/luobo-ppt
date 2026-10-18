@@ -178,8 +178,15 @@ def hero_or_none(ctx, x, y, w, h, key="hero"):
 
 
 def corner_hero(ctx, w=3.2, h=1.9):
-    """Small illustration in the top-right corner, next to the title."""
-    return hero_or_none(ctx, CANVAS_W - MX - w + 0.2, 0.55, w, h)
+    """Small illustration in the top-right corner, next to the title. A brand's mascot is a
+    full figure, not a cut-off decoration: it stays above the content (no feet on the cards)."""
+    y = 0.55
+    b = getattr(ctx.S, "brand", None)
+    if b:
+        if (b.get("logo") or {}).get("content") == "header":
+            y = 0.75  # below the running header's hairline
+        h = min(h, CONTENT_Y - y - 0.12)
+    return hero_or_none(ctx, CANVAS_W - MX - w + 0.2, y, w, h)
 
 
 def brush_behind(ctx, x, y, w, h):

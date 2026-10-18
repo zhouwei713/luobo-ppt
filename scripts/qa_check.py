@@ -195,7 +195,10 @@ def brand_checks(style, pptx, dump, deck, add):
         els = sd["elements"]
         logos = [e for e in els if e.get("role") == "logo" and e.get("t") == "image"]
         sl = next((x for x in deck["slides"] if x.get("n") == n), {})
-        if has_logo and not logos and sl.get("logo") is not False:
+        header = cfg.get("content") == "header" and sd.get("master", "content") == "content"
+        if header and not any(e.get("brand_header") for e in els) and sl.get("logo") is not False:
+            add("WARN", n, "brand-logo", "这一页没有品牌页眉")
+        if has_logo and not logos and not header and sl.get("logo") is not False:
             add("WARN", n, "brand-logo", "这一页没有放 logo（不要的话在这一页写 \"logo\": false）")
         for lg in logos:
             h = lg.get("rh", lg["h"])
@@ -472,7 +475,8 @@ def main():
     floor = 14 if proj else 12
     for sd in dump["slides"]:
         for e in sd["elements"]:
-            if e["t"] == "text" and e["size"] < floor and len(e["text"]) > 12 and (proj or e.get("color") not in ("muted", "subtle")):
+            if e["t"] == "text" and e["size"] < floor and len(e["text"]) > 12 and not e.get("brand_header") \
+                    and (proj or e.get("color") not in ("muted", "subtle")):
                 add("WARN", sd["n"], "small-text", f"{e['text'][:24]!r} 只有 {e['size']}pt，"
                     + ("投影模式下文字不小于 14pt" if proj else "正文建议不小于 12pt"))
     if len(deck["slides"]) > 15 and not any(sl.get("type") == "section" for sl in deck["slides"]):
