@@ -103,6 +103,23 @@ class SnapTests(unittest.TestCase):
         self.assertIn(S.c("primary@0.45"), allowed - {"FFFFFF"})
 
 
+class LightPrimaryTests(unittest.TestCase):
+    def test_orange_primary_keeps_text_on_the_hierarchy(self):
+        """An orange primary does not read as text on white: labels and big numbers go to the
+        next colour of the manual (navy), not to a look-alike green; dark grounds use navy."""
+        sys.path.insert(0, str(SCRIPTS))
+        import brand_kit as BK
+        b = {"name": "x", "allow": ["FFFFFF"], "colors": [
+            {"hex": "F97316", "role": "primary"}, {"hex": "14306B", "role": "secondary"},
+            {"hex": "1FA84F", "role": "extra"}, {"hex": "F4F6FA", "role": "background"},
+            {"hex": "1F2937", "role": "text"}]}
+        S = Style(BK.build_style(tempfile.gettempdir(), b))
+        self.assertEqual(S.palette["primary"], "F97316")
+        for k in ("highlight", "label", "strong"):
+            self.assertEqual(S.palette[k], "14306B", k)
+        self.assertEqual((S.palette["primary_dark"], S.palette["on_dark"]), ("14306B", "FFFFFF"))
+
+
 class BrandKitTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

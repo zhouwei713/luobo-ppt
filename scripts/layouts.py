@@ -1651,7 +1651,8 @@ def framework_layout(s, ctx):
 
 def closing(s, ctx):
     dark = ctx.S.decor.get("closing_dark", True)
-    on = "on_primary" if dark else "strong"
+    # text on the dark closing ground (a brand with a light primary closes on its darkest colour)
+    on = ("on_dark" if "on_dark" in ctx.S.palette else "on_primary") if dark else "strong"
     els = []
     hero = ctx.asset("hero")
     y = 0.7

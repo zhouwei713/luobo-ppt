@@ -312,9 +312,16 @@ def build_style(work, b, base=None):
     surface = "FFFFFF" if "FFFFFF" in allowed else page
     if surface == page and tint != page and not outline:
         surface = tint
-    pal = {"primary": primary, "primary_dark": primary, "accent": accent, "bg_top": page, "bg_bottom": page,
+    # dark grounds (closing page, dark bands) need white to read; a light primary such as an
+    # orange hands that job to the darkest brand colour
+    dark = primary
+    if not ("FFFFFF" in allowed and contrast("FFFFFF", primary) >= 4.5):
+        darks = [h for h in allowed if "FFFFFF" in allowed and contrast("FFFFFF", h) >= 4.5 and h != text]
+        dark = min(darks, key=rel_lum) if darks else primary
+    pal = {"primary": primary, "primary_dark": dark, "accent": accent, "bg_top": page, "bg_bottom": page,
            "surface": surface, "tint": tint, "text": text, "muted": text,
-           "on_primary": on_primary, "line": text if outline else tint}
+           "on_primary": on_primary, "line": text if outline else tint,
+           "on_dark": "FFFFFF" if ("FFFFFF" in allowed and contrast("FFFFFF", dark) >= 4.5) else text}
     style = load_json(style_file(base)) if base else {}
     fonts = {"heading_ea": "Microsoft YaHei", "body_ea": "Microsoft YaHei", "heading_latin": "Arial",
              "body_latin": "Arial", "display_latin": "Arial Black"}
