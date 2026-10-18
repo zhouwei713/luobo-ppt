@@ -81,6 +81,20 @@ class Builder:
         a = etree.SubElement(clr, qn("a:alpha"))
         a.set("val", "7000" if soft else "16000")
 
+    def _hard_shadow(self, shape):
+        """Offset shadow with no blur, in the ink colour: the sticker look of pop brand manuals."""
+        spPr = shape._element.spPr
+        eff = etree.SubElement(spPr, qn("a:effectLst"))
+        sh = etree.SubElement(eff, qn("a:outerShdw"))
+        d = self.S.shape.get("hard_shadow", 0.07)
+        sh.set("blurRad", "0")
+        sh.set("dist", str(int(914400 * d * self.k)))
+        sh.set("dir", "2700000")
+        sh.set("algn", "tl")
+        sh.set("rotWithShape", "0")
+        clr = etree.SubElement(sh, qn("a:srgbClr"))
+        clr.set("val", self.S.c("line"))
+
     def _font(self, run, role, size, bold, color, serif=False):
         f = run.font
         f.size = self.pt(size)
@@ -163,7 +177,10 @@ class Builder:
         else:
             shp.line.fill.background()
         if e.get("shadow") and self.S.depth not in ("flat", "ring"):
-            self._shadow(shp, soft=(e["shadow"] == "soft" or self.S.depth == "whisper"))
+            if e["shadow"] == "hard" or self.S.depth == "outline":
+                self._hard_shadow(shp)
+            else:
+                self._shadow(shp, soft=(e["shadow"] == "soft" or self.S.depth == "whisper"))
         return shp
 
     def image(self, slide, e):
@@ -322,6 +339,20 @@ class Builder:
                     tcPr.append(fill)
         return gf
 
+    def grid_color(self):
+        """Chart grid lines: the style's line colour, except in a brand deck whose line colour is
+        a heavy ink outline; there a light brand grey, or no grid lines at all."""
+        P = self.S
+        grid = P.c("line")
+        if P.brand and contrast_ok_dark(grid, P.c("surface")):
+            import colorsys
+            from common import hex_to_rgb
+            t = P.c("tint")
+            r, g, b = [v / 255 for v in hex_to_rgb(t)]
+            sat = colorsys.rgb_to_hls(r, g, b)[2]
+            grid = t if (t != P.c("surface") and sat < 0.25) else None  # a yellow tint is no grid grey
+        return grid
+
     def scatter(self, slide, e):
         """XY scatter: both axes are numbers, so both stay visible with their tick labels."""
         from pptx.chart.data import XyChartData
@@ -361,9 +392,10 @@ class Builder:
             pos = ax_el.find(qn("c:axPos"))
             vertical = pos is not None and pos.get("val") in ("l", "r")
             ax.visible = True
-            ax.has_major_gridlines = vertical
-            if vertical:
-                ax.major_gridlines.format.line.color.rgb = RGBColor.from_string(P.c("line"))
+            grid = self.grid_color()
+            ax.has_major_gridlines = vertical and grid is not None
+            if vertical and grid:
+                ax.major_gridlines.format.line.color.rgb = RGBColor.from_string(grid)
                 if fmt != "General":
                     ax.tick_labels.number_format = fmt
                     ax.tick_labels.number_format_is_linked = False
@@ -410,11 +442,16 @@ class Builder:
         ch.has_title = False
         P = self.S
         palette = [P.c("primary"), P.c("accent"), P.c("primary@0.45"), P.c("muted"), P.c("primary_dark"), P.c("accent@0.5")]
+        brand = P.brand_series()
+        if brand:
+            palette = brand  # a brand deck: series in the manual's colours only, no tints
         hl = spec.get("highlight")
         plot = ch.plots[0]
         if kind in ("pie", "doughnut"):
             n = len(cats)
             shades = [P.c("primary")] + [mix(P.c("primary"), "FFFFFF", 0.2 + 0.6 * i / max(1, n - 1)) for i in range(1, n)]
+            if brand:
+                shades = [brand[i % len(brand)] for i in range(n)]
             if hl is not None and 0 <= hl < n:
                 shades[hl] = P.c("accent")
             for i, pt in enumerate(plot.series[0].points):
@@ -434,7 +471,7 @@ class Builder:
                 from common import contrast
                 for i, pt in enumerate(plot.series[0].points):
                     f = shades[i % len(shades)]
-                    ink = max(("1A1A1A", "FFFFFF"), key=lambda c: contrast(c, f))
+                    ink = max((P.c("text"), "FFFFFF"), key=lambda c: contrast(c, f))
                     pl = pt.data_label
                     pl.font.size = self.pt(e.get("size", 12))
                     pl.font.bold = True
@@ -471,12 +508,23 @@ class Builder:
             else:
                 sr.format.fill.solid()
                 base = P.c("primary@0.45") if (hl is not None and len(series) == 1) else col
+                top = P.c("primary")
+                if brand and hl is not None and len(series) == 1:
+                    # no tints in a brand deck: the other bars keep the primary colour and the
+                    # highlighted one takes the next brand colour that shows on the card
+                    from common import contrast as _ct
+                    acc = P.c("accent")
+                    base = P.c("primary")
+                    top = acc if (_ct(acc, P.c("surface")) >= 1.6 and acc != base) else next((c for c in brand[1:]), acc)
                 sr.format.fill.fore_color.rgb = RGBColor.from_string(base)
+                if P.depth == "outline":
+                    sr.format.line.color.rgb = RGBColor.from_string(P.c("line"))
+                    sr.format.line.width = self.pt(1.5)
                 if hl is not None and len(series) == 1:
                     idx = (len(cats) - 1 - hl) if kind == "bar" else hl
                     pt = sr.points[idx]
                     pt.format.fill.solid()
-                    pt.format.fill.fore_color.rgb = RGBColor.from_string(P.c("primary"))
+                    pt.format.fill.fore_color.rgb = RGBColor.from_string(top)
         if kind != "line":
             plot.gap_width = 60
             if kind == "stacked":
@@ -493,6 +541,22 @@ class Builder:
             dl.number_format_is_linked = False
         if kind == "stacked":
             dl.position = XL_LABEL_POSITION.CENTER
+            # labels sit on the bars: each series gets the ink that reads on its own colour
+            from common import contrast as _ct
+            for i, sr in enumerate(plot.series):
+                f = palette[i % len(palette)]
+                inks = (P.c("text"), P.c("on_primary")) + (() if P.brand else ("FFFFFF",))
+                ink = max(inks, key=lambda c: _ct(c, f))
+                if ink == P.c("text"):
+                    continue
+                sdl = sr.data_labels
+                sdl.show_value = True
+                sdl.position = XL_LABEL_POSITION.CENTER
+                sdl.font.size = self.pt(e.get("size", 12))
+                sdl.font.bold = True
+                sdl.font.color.rgb = RGBColor.from_string(ink)
+                if fmt != "General":
+                    _set_numfmt(sr._element.get_or_add_dLbls(), fmt)
         elif kind == "line":
             dl.position = XL_LABEL_POSITION.ABOVE
             if len(series) > 1:
@@ -521,14 +585,18 @@ class Builder:
                     last.position = XL_LABEL_POSITION.RIGHT
                     last.font.size = self.pt(e.get("size", 12))
                     last.font.bold = True
-                    last.font.color.rgb = RGBColor.from_string(palette[si % len(palette)])
+                    # the end label in the line's colour, unless that colour does not read on the card
+                    from common import contrast as _ct
+                    lc = palette[si % len(palette)]
+                    last.font.color.rgb = RGBColor.from_string(lc if _ct(lc, P.c("surface")) >= 3 else P.c("text"))
         else:
             dl.position = XL_LABEL_POSITION.OUTSIDE_END
         va, ca = ch.value_axis, ch.category_axis
         va.visible = False
-        va.has_major_gridlines = kind == "line"
+        grid = self.grid_color()
+        va.has_major_gridlines = kind == "line" and grid is not None
         if va.has_major_gridlines:
-            va.major_gridlines.format.line.color.rgb = RGBColor.from_string(P.c("line"))
+            va.major_gridlines.format.line.color.rgb = RGBColor.from_string(grid)
         ca.format.line.color.rgb = RGBColor.from_string(P.c("line"))
         ca.tick_labels.font.size = self.pt(e.get("size", 12))
         ca.tick_labels.font.color.rgb = RGBColor.from_string(P.c("text"))
@@ -672,8 +740,148 @@ class Builder:
         return els
 
 
+# ---------------------------------------------------------------- brand logo
+_BG_SAMPLES = {}
+
+
+def _under_color(style, els, box):
+    """Colour behind a box: the last filled shape covering its centre, else the background image."""
+    from common import rgb_to_hex
+    cx, cy = (box[0] + box[2]) / 2, (box[1] + box[3]) / 2
+    for e in reversed(els):
+        if e.get("t") in ("rect", "ellipse") and e.get("fill") and \
+                e["x"] <= cx <= e["x"] + e["w"] and e["y"] <= cy <= e["y"] + e["h"]:
+            return style.c(e["fill"])
+        if e.get("t") == "image" and e.get("role") == "background":
+            from PIL import Image
+            path = e["path"]
+            if path not in _BG_SAMPLES:
+                _BG_SAMPLES[path] = Image.open(path).convert("RGB").resize((160, 90))
+            im = _BG_SAMPLES[path]
+            k = 160 / CANVAS_W
+            crop = im.crop((int(max(0, box[0]) * k), int(max(0, box[1]) * k),
+                            int(min(CANVAS_W, box[2]) * k) + 1, int(min(CANVAS_H, box[3]) * k) + 1))
+            return rgb_to_hex(crop.resize((1, 1)).getpixel((0, 0)))
+    return style.c("bg_bottom")
+
+
+def _extent(e):
+    """The box an element really covers (text: its widest line, not the whole text frame)."""
+    x, y, w, h = e.get("rx", e["x"]), e.get("ry", e["y"]), e.get("rw", e.get("w", 0)), e.get("rh", e.get("h", 0))
+    if e.get("t") == "text":
+        lines = str(e.get("text", "")).replace("**", "").split("\n")
+        lw = min(w, max(text_width_pt(l, e["size"], e.get("bold", False)) for l in lines) / 72 + 0.05)
+        al = e.get("align", "l")
+        x = x if al == "l" else (x + w - lw if al == "r" else x + (w - lw) / 2)
+        w = lw
+    return (x, y, x + w, y + h)
+
+
+def _hit(a, b):
+    return min(a[2], b[2]) - max(a[0], b[0]) > 0.01 and min(a[3], b[3]) - max(a[1], b[1]) > 0.01
+
+
+def place_logo(style, s, master, els):
+    """The brand logo for one slide, at the manual's spot with its clear space kept free.
+
+    Tries the preferred corner, then the others; a picture in the way (a mascot, an illustration)
+    is moved down out of the clear space, text in the way means the next corner. Dark grounds get
+    the reversed logo, or the light one on a white plate. Returns the logo elements."""
+    from PIL import Image
+    from common import rel_lum
+    b = style.brand or {}
+    logos = [l for l in b.get("logos", []) if Path(l.get("file", "")).exists()]
+    if not logos or s.get("logo") is False:
+        return []
+    cfg = b.get("logo", {})
+    m = "content" if master not in ("cover", "closing") else master
+    pref = s.get("logo") if isinstance(s.get("logo"), str) else cfg.get(f"{m}_position") or \
+        {"cover": "top-left", "closing": "top-center"}.get(m, cfg.get("content", "top-right"))
+    if pref == "none":
+        return []
+    kind = cfg.get(m, "horizontal") if m in ("cover", "closing") else cfg.get("content_kind", "horizontal")
+    if kind == "auto":
+        kind = "vertical" if m != "content" else "horizontal"
+    big = m != "content"
+    H0 = cfg.get("height", 0.5) * (cfg.get("cover_scale", 2.0) if big and kind == "vertical" else (1.4 if big else 1))
+    order = [pref] + [p for p in ("top-right", "top-left", "bottom-right", "bottom-left", "top-center") if p != pref]
+    obstacles = [e for e in els if e.get("role") not in ("background", "decor") and e.get("t") != "chart_bg"]
+
+    def choose(dark):
+        want = "dark" if dark else "light"
+        for pick in ([l for l in logos if l.get("on") in (want, "any") and l.get("kind") == kind],
+                     [l for l in logos if l.get("on") in (want, "any")],
+                     [l for l in logos if l.get("kind") == kind], logos):
+            if pick:
+                return pick[0]
+
+    for pos in order:
+        lg = choose(False)
+        with Image.open(lg["file"]) as im:
+            ar = im.width / im.height
+        h = H0
+        w = h * ar
+        if w > 3.2:
+            w, h = 3.2, 3.2 / ar
+        cs = cfg.get("clear_space", 0.25) * h
+        x = {"top-right": CANVAS_W - L.MX - w, "bottom-right": CANVAS_W - L.MX - w, "top-left": L.MX,
+             "bottom-left": L.MX, "top-center": (CANVAS_W - w) / 2}[pos]
+        y = 0.42 if pos.startswith("top") else CANVAS_H - 0.42 - h
+        if pos == "top-center":
+            y = 0.6
+        box = (x - cs, y - cs, x + w + cs, y + h + cs)
+        hits = [e for e in obstacles if _hit(box, _extent(e))]
+        if any(e.get("t") != "image" or e.get("role") == "stamp" for e in hits):
+            continue
+        for e in hits:  # pictures step out of the clear space
+            ex = _extent(e)
+            if pos.startswith("top"):
+                ny = box[3] + 0.05
+                e["h"] = max(0.4, e["y"] + e["h"] - ny)
+                e["y"] = ny
+            else:
+                e["h"] = max(0.4, box[1] - 0.05 - e["y"])
+            for k in ("rx", "ry", "rw", "rh"):
+                e.pop(k, None)
+        under = _under_color(style, els, (x, y, x + w, y + h))
+        dark = rel_lum(under) < 0.25
+        lg2 = choose(dark)
+        if lg2 is not lg:
+            with Image.open(lg2["file"]) as im:
+                ar2 = im.width / im.height
+            w2 = h * ar2
+            x = x + (w - w2) if pos.endswith("right") else (x + (w - w2) / 2 if pos == "top-center" else x)
+            w, lg = w2, lg2
+        out = []
+        if dark and lg.get("on") == "light":
+            pad = cs * 0.8
+            pl = L.R(x - pad, y - pad, w + 2 * pad, h + 2 * pad, fill="FFFFFF", radius=0.08)
+            pl["role"] = "logo"
+            out.append(pl)
+        e = L.IMG(lg["file"], x, y, w, h)
+        e.update(role="logo", clear=cs)
+        out.append(e)
+        return out
+    # nowhere free: the preferred corner, and QA says so
+    lg = choose(False)
+    with Image.open(lg["file"]) as im:
+        ar = im.width / im.height
+    h = H0
+    w = h * ar
+    x = CANVAS_W - L.MX - w
+    e = L.IMG(lg["file"], x, 0.42, w, h)
+    e.update(role="logo", clear=cfg.get("clear_space", 0.25) * h)
+    return [e]
+
+
 # a source line that already carries its own label ("数据来源：", "资料来源", "Source:") is not prefixed again
 SOURCE_LABEL = re.compile(r"^\s*(数据|资料|图片|信息)?(来源|出处)|^\s*(source|data|via)\b", re.I)
+
+
+def contrast_ok_dark(c, surface):
+    """True when c is a dark, heavy colour on the card (fine for text, too much for a grid line)."""
+    from common import contrast
+    return contrast(c, surface) >= 4.5
 
 
 def _set_numfmt(el, fmt):
@@ -816,6 +1024,8 @@ def main():
         for e in chrome:
             e.setdefault("role", "chrome")
         all_els = b.master(s, info, ps) + els + chrome
+        if style.brand:
+            all_els += place_logo(style, s, info.get("master", "content"), all_els)
         pill = bool(s.get("takeaway") and not info.get("uses_takeaway"))
         # content must end above the takeaway pill, the source line or the footer row
         rail = 6.25 if pill else (6.45 if ((s.get("source") or s.get("footnote")) and style.decor.get("chrome") != "editorial") else 6.8)

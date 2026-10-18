@@ -212,7 +212,7 @@ def main():
             continue
         # a photo or the user's own picture placed by photo_assets.py stays unless asked for by name
         kept = done.get(asset["id"], {}).get("method", "")
-        if (kept.startswith("photo:") or kept == "user") and out.exists() and not (only and asset["id"] in only):
+        if (kept.startswith("photo:") or kept in ("user", "brand")) and out.exists() and not (only and asset["id"] in only):
             continue
         todo.append((asset, out))
 
@@ -232,9 +232,22 @@ def main():
     placed = {i for i, m in done.items() if m.get("method", "").startswith("photo:") or m.get("method") == "user"}
     placed -= only or set()
 
+    # a brand kit's mascots and stickers fill the picture slots, whole and uncropped
+    art = [f for f in ((style.brand or {}).get("art") or []) if Path(f).exists()] if getattr(style, "brand", None) else []
+    art_of = {}
+    for i, (asset, _) in enumerate([t for t in todo if t[0]["kind"] == "hero"]):
+        if art:
+            art_of[asset["id"]] = art[i % len(art)]
+
     def work_one(item):
         asset, out = item
         recs = []
+        if asset["id"] in art_of:
+            from PIL import Image
+            from photo_assets import fit_art
+            fit_art(Image.open(art_of[asset["id"]]), asset.get("size") or [1400, 900]).save(out)
+            return [{"id": asset["id"], "kind": "hero", "path": str(out), "method": "brand",
+                     "source_file": art_of[asset["id"]]}]
         if asset["kind"] == "sheet" and placed & {it["id"] for it in asset.get("items", [])}:
             # some pictures of this sheet are photos: draw only the others, one by one
             asset = dict(asset, items=[it for it in asset["items"] if it["id"] not in placed])

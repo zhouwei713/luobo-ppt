@@ -23,6 +23,7 @@ description: 做 PPT 和美化 PPT 的一站式 skill，输出可编辑的原生
    - 用户给了 .pptx，要换个好看的样子 → 路线 A 美化
    - 给的是题目、文章、口播稿、大纲或其他素材，要做成 PPT → 路线 B 生成
    - 给了 .pptx 但要重写内容、调整结构 → 路线 B，把 pptx 当素材读
+   - 另外给了企业 VI 手册、品牌规范，或者说"按公司 VI 做""用我们的品牌色"→ 两条路线都先做"品牌套件"，风格从手册来，不再读参考图、不出风格样张
 2. **环境自检**，之前通过的话一秒内结束，否则自动补装依赖。退出码非 0 就把建议告诉用户并停下；只缺推荐组件（如 LibreOffice）可以继续，pipeline 会改用 `render_lite.py` 按排版数据直接画近似预览，排版、配色、溢出照样能看，交付时说明预览是近似图。想跳过 LibreOffice 提速也可以加 `--lite`。
    ```bash
    python3 $S/setup_check.py --quick --install
@@ -50,6 +51,17 @@ description: 做 PPT 和美化 PPT 的一站式 skill，输出可编辑的原生
 4. **定动画**：口播稿、讲课按 `scenario` 默认就是逐条点击出现，汇报默认只有翻页效果，一般不用写。用户提了要求或场景特殊再写 `meta.animation`（`none`、`transition`、`auto`、`click`），说明见 `references/deck_schema.md` 的"动画"一节。
 5. **定风格**：有参考图走路线 A 第 2 步；没有就 `python3 $S/style_previews.py $W --auto` 出三张样张（用户自己的封面和内容页），发 `previews/sheet.png` 让用户挑，再 `--apply <id>`。预设在 `references/styles/`，共十四套，每套的硬规则排版时要遵守。要在会议室投影的，在 `meta` 里写 `"projection": true`，字号下限会抬高。
 6. 接着走下面的"版式、出图与检查"。
+
+## 品牌套件（有企业 VI 手册时）
+
+VI 手册规定的是精确色值、字体、logo 的用法和安全空间。拿手册页当参考图取色会取错，色板只占页面的一小块，所以有手册时风格只从手册来，规则见 `references/brand.md`。
+
+1. **拆页** `python3 $S/brand_kit.py pages 手册.pdf $W`，手册页面放在 `$W/brand/pages/`，一整张长图导出的手册会按页切开。文字层里的色值会列出来；手册是整页图片时没有文字层，要看图读。
+2. **读手册写 brand.json**：把 `brand.draft.json` 填好另存为 `$W/brand.json`。色值一律抄手册上印的数字，不从图上取色；每个颜色标 role（primary、secondary、accent、extra、text、background、neutral）。字体、logo 安全空间和最小尺寸、标志性元素（标题竖条、粗描边加硬投影）、禁用项、IP 形象和辅助图形都照手册写。logo 和形象用 `brand_kit.py crop $W 页面.png x0 y0 x1 y1 名字 --clear` 从页面上截下来（白底变透明）；手册没有深底用的反白 logo 时，`brand_kit.py plate` 做一个白底版。手册对形象有限制的（比如"只用于运营活动"），写进 rules 并照办。
+3. **核对** `python3 $S/brand_kit.py check $W`，每个色值会回到手册页面上找，一个像素都找不到的多半读错了，回去再看。
+4. **生成风格** `python3 $S/brand_kit.py apply $W`，写出 `style.json` 和 `brand/brand_card.png`。把品牌卡发给用户确认颜色、字体和 logo，代替风格卡。
+5. 回到原来的路线继续，跳过读参考图和挑风格。logo 每页自动放在手册要求的位置并留出安全空间，不要再写进 `stamps`；某页不要 logo 就在这页写 `"logo": false`。品牌套件里的 IP 形象和贴纸会自动放进插画位，整张放、不裁切。
+6. QA 多出一组 brand 检查：手册以外的颜色、手册不许的渐变、logo 安全空间里有别的东西、logo 小于最小尺寸都是 ERROR。手册字体没装是 WARN，要告诉用户装上，或者发给别人前在 PowerPoint 里嵌入字体。
 
 ## 版式、出图与检查（两条路线共用）
 
@@ -161,6 +173,7 @@ python3 $S/photo_assets.py drop   $W hero_01               # 退回插画
 | `references/layouts.md` | 版式库、适用场景、容量、free 版式元素格式 |
 | `scripts/layout_info.py` | 查版式容量和 deck.json 示例，`--check $W` 逐页查超容量 |
 | `references/style_extraction.md` | 从参考图读出 style.json |
+| `references/brand.md` | 企业 VI 手册做成品牌套件：brand.json 字段、logo 规则、品牌检查 |
 | `references/styles/` | 十四套风格预设（index.json + 每套 json，含硬规则和 imagery 标签），样张在 `assets/style_gallery.jpg`（第 N 行对应 index.json 里的 gallery_row） |
 | `references/image_prompts.md` | 视觉锚点和插画提示词 |
 | `references/imagegen_config.md` | 生图接口配置 |
