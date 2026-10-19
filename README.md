@@ -1,25 +1,28 @@
 <div align="center">
 
-<img src="docs/images/logo.png" width="120" alt="萝卜 PPT">
-
-# 萝卜 PPT.skill
-
-> *丢进来一篇文章或一份旧 PPT，拿回去一份能直接改字的原生 PPT。*
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/banner-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset="docs/images/banner-light.png">
+  <img alt="萝卜 PPT，丢进来一篇文章或一份旧 PPT，拿回一份能直接改字的原生 PPT" src="docs/images/banner-light.png" width="100%">
+</picture>
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Version](https://img.shields.io/badge/version-2.7.3-F97316)](#更新记录)
+[![Output](https://img.shields.io/badge/Output-原生可编辑%20.pptx-1F7A55)](#效果示例)
+[![Runtime](https://img.shields.io/badge/Runtime-Claude%20·%20Codex%20·%20Gemini%20CLI%20·%20Cursor%20·%20Copilot-0E5A3E)](#安装)
 [![Agent Skills](https://img.shields.io/badge/Agent%20Skills-SKILL.md-green)](https://agentskills.io)
-[![Runtime](https://img.shields.io/badge/Runtime-Claude%20·%20Codex%20·%20Gemini%20CLI%20·%20Cursor%20·%20Copilot-blueviolet)](#安装)
-[![Output](https://img.shields.io/badge/Output-原生可编辑%20.pptx-orange)](#效果示例)
-[![Version](https://img.shields.io/badge/version-2.5.0-blue)](#更新记录)
 
 <br>
 
-**一个做 PPT 和美化 PPT 的 Agent Skill。**
+<img src="docs/images/beautify-loop.gif" width="760" alt="一页朴素的 PPT 慢慢变成美化后的样子">
 
-从零生成时，给它一个题目、一篇文章、一份口播稿或大纲，它先写出结论式标题和口播备注，再排版出图。
-按参考图美化时，给它一份朴素的 .pptx 和一张参考图，它把原文一字不改地搬进统一的配色、版式、图标和插画里，少一个字都不交。
+<br><br>
 
-<br>
+**一个做 PPT 和美化 PPT 的 Agent Skill，装进 Agent 发一句话就能用。**
+
+```text
+帮我安装这个 skill：https://github.com/zhouwei713/luobo-ppt
+```
 
 [效果示例](#效果示例) · [安装](#安装) · [使用方式](#使用方式) · [它解决什么](#它解决什么) · [工作原理](#工作原理) · [14 套风格](#14-套风格)
 
@@ -27,7 +30,35 @@
 
 ---
 
+## 三件事
+
+### 从零生成
+
+给它一个题目、一篇文章、一份口播稿或大纲，它先写出结论式标题和口播备注，再排版、配图、加动画。
+
+![从零生成](docs/images/feature-1-generate.png)
+
+### 照参考图美化
+
+给它一份朴素的 .pptx 和一张参考图，它把原文一字不改地搬进统一的配色、版式、图标和插画里，少一个字都不交。
+
+![照参考图美化](docs/images/feature-2-beautify.png)
+
+### 原生可编辑
+
+文字是文本框，表格是真表格，图表是 PowerPoint 原生图表，双击就能改数据。PowerPoint、WPS、Keynote 都能打开。
+
+![原生可编辑](docs/images/feature-3-native-pptx.png)
+
+---
+
 ## 效果示例
+
+### 同一页内容，美化前后
+
+左边是原稿，右边是换上暖橙风格之后的样子。标题和数字一个没动，柱状图还是能改数据的原生图表。
+
+![一页图表美化前后](docs/images/before-after-chart.png)
 
 ### 文字一个不动，换身衣服
 
@@ -153,6 +184,8 @@ plan.json ──> 出插画 ──> 组装原生 pptx ──> 渲染预览 ─�
 ---
 
 ## 安装
+
+![三步装好](docs/images/install-steps.png)
 
 仓库根目录就是 skill 本身（`SKILL.md` 在最外层），装好之后第一次使用时，Skill 会自己检查环境、补装缺少的 Python 包。
 
