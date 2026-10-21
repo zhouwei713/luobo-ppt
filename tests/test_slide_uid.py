@@ -43,6 +43,23 @@ class SlideUidTests(unittest.TestCase):
         report = json.loads((w / "out" / "qa_report.json").read_text(encoding="utf-8"))
         self.assertFalse([i for i in report["issues"] if i["check"] == "fidelity"], report["issues"])
 
+    def test_adding_uids_keeps_the_old_plan(self):
+        w = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, w, True)
+        shutil.copy(ROOT / "references" / "styles" / "dark-tech.json", w / "style.json")
+        deck = {"meta": {"title": "t"}, "slides": [
+            {"n": 1, "type": "statement", "title": "一页主张", "headline": "一句话", "body": "补充。"}]}
+        (w / "deck.json").write_text(json.dumps(deck, ensure_ascii=False), encoding="utf-8")
+        run_script("plan_deck.py", w, "--level", "light")
+        plan = json.loads((w / "plan.json").read_text(encoding="utf-8"))
+        plan["slides"][0]["layout"] = "statement_number"  # a hand edit
+        (w / "plan.json").write_text(json.dumps(plan, ensure_ascii=False), encoding="utf-8")
+        deck["slides"][0]["uid"] = "s-later01"
+        (w / "deck.json").write_text(json.dumps(deck, ensure_ascii=False), encoding="utf-8")
+        r = run_script("plan_deck.py", w, "--level", "light")
+        self.assertIn("保留了 1 页", r.stdout)
+        self.assertEqual(json.loads((w / "plan.json").read_text(encoding="utf-8"))["slides"][0]["layout"], "statement_number")
+
 
 if __name__ == "__main__":
     unittest.main()
