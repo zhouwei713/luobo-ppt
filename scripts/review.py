@@ -46,7 +46,11 @@ def main():
     dump = load_json(out / "layout_dump.json")
     deck = load_json(work / "deck.json")
     style = load_style(work / "style.json")
-    qa = load_json(out / "qa_report.json") if (out / "qa_report.json").exists() else {"issues": [], "counts": {}}
+    # a missing report, or one older than the layout dump, means QA did not check this build
+    rp = out / "qa_report.json"
+    qa_ran = rp.exists() and rp.stat().st_mtime >= (out / "layout_dump.json").stat().st_mtime
+    qa = load_json(rp) if qa_ran else {"issues": [], "counts": {}}
+    qa_errors = qa.get("counts", {}).get("ERROR", 0) if qa_ran else "QA 没跑完（报告缺失或过期），先重跑 qa_check.py"
     slides = dump["slides"]
     n = len(slides)
 
@@ -107,7 +111,7 @@ def main():
     detail = [
         ("左边缘差一点没对齐（英寸）", "；".join(miss) if miss else "无", "0.03 到 0.18 英寸的错位多半是失误"),
         ("QA 警告分布", ", ".join(f"{k}×{v}" for k, v in warn_by.most_common()) or "无", "contrast、rail、accent 优先处理"),
-        ("QA 错误", qa.get("counts", {}).get("ERROR", 0), "必须为 0"),
+        ("QA 错误", qa_errors, "必须为 0"),
     ]
 
     # ---- 传达
@@ -160,8 +164,9 @@ def main():
     (out / "review.md").write_text("\n".join(md), encoding="utf-8")
     print(f"wrote {out / 'review.md'}")
     print(f"  字号 {len(sizes)} 种，版式 {len(set(layouts))}/{n}，层级偏弱的页 {weak or '无'}，"
-          f"对齐疑点 {len(miss)} 页，QA 错误 {qa.get('counts', {}).get('ERROR', 0)}")
+          f"对齐疑点 {len(miss)} 页，QA 错误 {qa_errors}")
+    return 0 if qa_ran else 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

@@ -64,6 +64,9 @@ def main():
               "图表是简化画法；要看 PowerPoint 级效果，装 LibreOffice 后重跑")
     elif not rendered:
         print("NOTE 没有生成预览图，视觉检查只能跳过，pptx 已正常生成")
+    if rc == 2 or not (w / "out" / "qa_report.json").exists():
+        print("\nQA CRASHED, the deck was NOT checked: read the traceback above, fix it and rerun")
+        return 2
     print("\nQA", "has ERRORS, fix before delivering" if rc else "passed (review WARN lines)")
     return rc
 

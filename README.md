@@ -7,7 +7,7 @@
 </picture>
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-2.7.4-F97316)](#更新记录)
+[![Version](https://img.shields.io/badge/version-2.7.5-F97316)](#更新记录)
 [![Output](https://img.shields.io/badge/Output-原生可编辑%20.pptx-1F7A55)](#效果示例)
 [![Runtime](https://img.shields.io/badge/Runtime-Claude%20·%20Codex%20·%20Gemini%20CLI%20·%20Cursor%20·%20Copilot-0E5A3E)](#安装)
 [![Agent Skills](https://img.shields.io/badge/Agent%20Skills-SKILL.md-green)](https://agentskills.io)
@@ -355,6 +355,7 @@ AI 最容易偷懒的地方恰好是这些看不见的规矩。所以这个 Skil
 
 ## 更新记录
 
+- 2.7.5 QA 关口更可信：手写的线条不再让 QA 崩溃；QA 崩溃时退出码是 2，pipeline 明说稿子没检查过；报告缺失或过期时 review 写“QA 没跑完”，不再显示错误 0；free 页的 elements 写在 deck.json 里也能用，重新规划时 plan 里手写的 elements 会保留，空的 free 页报 ERROR
 - 2.7.4 大数字页的数字很宽时（比如“≤ 0.5 元 / 秒”），两行说明改排到数字下方，不再被挤出页面；QA 遇到页面外的文本框不再中途崩溃，整块在页面外或宽度为负的文字报 ERROR
 - 2.7.3 主色是亮黄、珊瑚红这类浅色时：结尾页留在主色上配深色字，标签底用主色，主色块上的小字改深色，淡到看不见的连接线换成深色品牌色，QA 会提醒看不见的连接线
 - 2.7.2 品牌主色是橙、黄这类浅色时，文字和大数字按手册的颜色顺序退到下一个读得清的品牌色，结尾页这类深色底改用最深的品牌色

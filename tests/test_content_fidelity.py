@@ -170,7 +170,12 @@ class PipelineTests(unittest.TestCase):
 
                 def run_stage(args):
                     called.append(Path(args[0]).name)
-                    return qa_status if called[-1] == "qa_check.py" else 0
+                    if called[-1] != "qa_check.py":
+                        return 0
+                    if qa_status != 2:  # a finished QA run leaves its report; a crash does not
+                        (Path(tmp) / "out").mkdir(exist_ok=True)
+                        (Path(tmp) / "out" / "qa_report.json").write_text("{}", encoding="utf-8")
+                    return qa_status
 
                 with patch.object(sys, "argv", ["pipeline.py", tmp, "--lite"]), \
                         patch.object(pipeline, "run", side_effect=run_stage), \
