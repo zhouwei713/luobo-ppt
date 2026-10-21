@@ -23,7 +23,9 @@ Checks
   brand-*    with a brand kit (style.json "brand"): a colour outside the manual's palette, a
              gradient the manual forbids, something inside the logo's clear space or a logo below
              its minimum size = ERROR; a page without the logo, or brand fonts not installed = WARN
-Writes WORK_DIR/out/qa_report.json. Exit code 1 when any ERROR.
+  free       a free-layout page with no elements = ERROR
+Writes WORK_DIR/out/qa_report.json (an old one is removed first, so a crash leaves no report).
+Exit code 1 when any ERROR, 2 when the check itself crashed.
 """
 import argparse
 import re
@@ -241,8 +243,14 @@ def main():
     a = ap.parse_args()
     work = Path(a.work)
     pptx = Path(a.pptx) if a.pptx else work / "out" / "beautified.pptx"
+    (pptx.parent / "qa_report.json").unlink(missing_ok=True)
     style = load_style(work / "style.json")
     dump = load_json(pptx.parent / "layout_dump.json")
+    for sd in dump["slides"]:
+        for e in sd["elements"]:
+            if e.get("t") == "line" and "x" not in e:  # hand-written lines carry only their end points
+                e["x"], e["y"] = min(e["x1"], e["x2"]), min(e["y1"], e["y2"])
+                e["w"], e["h"] = abs(e["x2"] - e["x1"]), abs(e["y2"] - e["y1"])
     deck = load_json(work / "deck.json")
     src_path = work / "source_text.json"
     gen_mode = not src_path.exists()
@@ -358,6 +366,8 @@ def main():
         n = sd["n"]
         els = sd["elements"]
         texts = [e for e in els if e["t"] == "text" and e.get("role") != "decor"]  # watermarks are decoration
+        if sd.get("empty_free"):
+            add("ERROR", n, "free", "free layout has no elements, the page is empty: write them in deck.json or plan.json")
         for e in els:
             if e.get("role") == "background":
                 continue
@@ -530,4 +540,10 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        import traceback
+        traceback.print_exc()
+        print("QA CRASHED: the deck was not checked and no qa_report.json was written")
+        sys.exit(2)

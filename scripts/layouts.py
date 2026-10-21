@@ -2048,8 +2048,10 @@ def explain(s, ctx):
 
 
 def free(s, ctx):
-    """Claude supplies ready elements in plan slide 'elements' (13.333x7.5 canvas)."""
-    return list(ctx.p.get("elements", [])), {"master": ctx.p.get("master", "content")}
+    """Claude supplies ready elements in the plan or deck slide 'elements' (13.333x7.5 canvas)."""
+    els = ctx.p.get("elements") or s.get("elements") or []
+    master = ctx.p.get("master") or s.get("master") or "content"
+    return list(els), {"master": master, "empty": not els}
 
 
 LAYOUTS = {

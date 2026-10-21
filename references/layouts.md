@@ -49,7 +49,7 @@
 | `table` | 原生表格，可高亮一列 | columns, rows, highlight_col, note | 无 |
 | `chart` | 原生图表配一到三条结论 | chart, insights, source | 无 |
 | `framework` | SWOT、PEST、波特五力、商业画布 | framework{kind,blocks,labels} | 无 |
-| `free` | 特殊页面，手工摆放 | plan 里的 elements | 自定 |
+| `free` | 特殊页面，手工摆放 | deck 或 plan 里的 elements | 自定 |
 
 ## 选版式的经验
 
@@ -117,9 +117,14 @@ python3 $S/layout_info.py --check $W    # 逐页检查 deck.json 超没超容量
    "radius": 0.18, "line": "line", "shadow": true},
   {"t": "ellipse", "x": 1, "y": 2.4, "w": 0.6, "h": 0.6, "fill": "tint"},
   {"t": "icon", "x": 1, "y": 2.4, "size": 0.6, "name": "lightbulb", "color": "primary", "bg": "tint", "circle": true},
-  {"t": "image", "x": 7.5, "y": 1, "w": 5, "h": 5, "path": "/abs/path/assets/hero_07.png", "fit": "contain"}
+  {"t": "image", "x": 7.5, "y": 1, "w": 5, "h": 5, "path": "/abs/path/assets/hero_07.png", "fit": "contain"},
+  {"t": "line", "x1": 0.8, "y1": 3.6, "x2": 5.8, "y2": 3.6, "color": "line", "lw": 1.5, "dash": false, "arrow": false}
 ]}
 ```
+
+线条只写两个端点 `x1 y1 x2 y2`，不用写 x、y、w、h。
+
+elements 写在 deck.json 那一页或 plan.json 那一页都可以，plan 里有就用 plan 的。重新跑 plan_deck 时，这页的 deck 内容改了，plan 里手写的 elements 也会带过去。两边都没有时页面是空的，QA 报 ERROR。
 
 颜色可写色板角色名（primary、primary_dark、accent、tint、surface、text、muted、line、on_primary、bg_top、bg_bottom，
 以及自动推导的 strong 大标题色、highlight 彩色文字色），

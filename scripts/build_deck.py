@@ -1090,7 +1090,7 @@ def main():
             slide.notes_slide.notes_text_frame.text = notes
         dump["slides"].append({"n": s["n"], "layout": lname, "master": info.get("master", "content"),
                                "rail": rail, "animation": {"mode": mode, "builds": builds},
-                               "elements": all_els})
+                               "empty_free": bool(info.get("empty")), "elements": all_els})
     out = Path(a.out) if a.out else work / "out" / "beautified.pptx"
     out.parent.mkdir(parents=True, exist_ok=True)
     prs.save(str(out))

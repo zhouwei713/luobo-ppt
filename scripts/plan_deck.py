@@ -288,6 +288,14 @@ def main():
                         return False
                     if not swap(assets):
                         assets.append(old_assets[hid])
+            elif op and ps["layout"] == "free" and op.get("elements") and not deck_by_n[ps["n"]].get("elements"):
+                # content changed, but hand-placed elements only exist in the old plan
+                ps["elements"] = op["elements"]
+                if op.get("master"):
+                    ps["master"] = op["master"]
+    for ps in slides:
+        if ps["layout"] == "free" and not ps.get("elements") and not deck_by_n[ps["n"]].get("elements"):
+            print(f"ERROR slide {ps['n']}: free 版式没有 elements，页面会是空的；写进 deck.json 或 plan.json 这一页")
     plan = {"level": a.level, "confirmed": False, "slides": slides, "assets": assets}
     save_json(plan, work / "plan.json")
     if kept:
