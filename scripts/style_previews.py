@@ -14,6 +14,7 @@ drawn on the slides.
 """
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -34,7 +35,9 @@ SAMPLE = {"meta": {"title": "示例", "series": "三分钟看懂", "anchor": {"d
 
 
 def run(args):
-    return subprocess.run([sys.executable] + [str(a) for a in args], capture_output=True, text=True)
+    # the child scripts print UTF-8; decode it as such, not with the console code page (GBK on Chinese Windows)
+    return subprocess.run([sys.executable] + [str(a) for a in args], capture_output=True, text=True,
+                          encoding="utf-8", errors="replace", env={**os.environ, "PYTHONIOENCODING": "utf-8"})
 
 
 def pick_auto(work):
@@ -83,6 +86,9 @@ def mini_deck(deck):
     return {"meta": meta, "slides": out}
 
 
+LITE = []  # presets whose previews came from render_lite
+
+
 def build_one(work, preset, deck):
     d = work / "previews" / preset
     if d.exists():
@@ -93,12 +99,18 @@ def build_one(work, preset, deck):
     save_json(mini_deck(deck), d / "deck.json")
     for step in ([HERE / "plan_deck.py", d, "--level", "standard"],
                  [HERE / "make_assets.py", d, "--procedural"],
-                 [HERE / "build_deck.py", d],
-                 [HERE / "render.py", d / "out" / "beautified.pptx", d / "png", "--dpi", "60"]):
+                 [HERE / "build_deck.py", d]):
         r = run(step)
         if r.returncode:
             raise SystemExit(f"{preset}: {Path(str(step[0])).name} failed\n{r.stdout[-400:]}{r.stderr[-400:]}")
-    return sorted((d / "png").glob("slide-*.png"))
+    if run([HERE / "render.py", d / "out" / "beautified.pptx", d / "png", "--dpi", "60"]).returncode == 0:
+        return sorted((d / "png").glob("slide-*.png"))
+    # no LibreOffice: draw approximate previews from the layout data, as pipeline.py does
+    r = run([HERE / "render_lite.py", d, "--dpi", "60"])
+    if r.returncode:
+        raise SystemExit(f"{preset}: render_lite.py failed\n{r.stdout[-400:]}{r.stderr[-400:]}")
+    LITE.append(preset)
+    return sorted((d / "out" / "png").glob("slide-*.png"))
 
 
 def sheet(rows, out, labels):
@@ -162,6 +174,8 @@ def main():
     out = work / "previews" / "sheet.png"
     sheet(rows, out, labels)
     print(f"sheet: {out}")
+    if LITE:
+        print("NOTE 没找到 LibreOffice，样张是按排版数据直接画的近似图（render_lite），配色和版式照样能比，细节以成品为准")
     if a.sample and a.all:
         # one gallery image for the whole preset library (keeps the skill package small)
         from PIL import Image, ImageDraw
