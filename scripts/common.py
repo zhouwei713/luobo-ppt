@@ -8,7 +8,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
-SKILL_VERSION = "2.7.7"
+SKILL_VERSION = "2.8.0"
 SKILL_DIR = Path(__file__).resolve().parent.parent
 # bundled icons and gallery: <skill>/assets, or <skill>/scripts/assets in packages whose
 # platform only allows SKILL.md + references/ + scripts/ + templates/ (WorkBuddy)

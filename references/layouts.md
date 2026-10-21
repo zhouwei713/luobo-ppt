@@ -107,6 +107,22 @@ python3 $S/layout_info.py --check $W    # 逐页检查 deck.json 超没超容量
 `icons` 按 items 顺序对应；没有 items 的页面，第一个图标用于 callout、pill 或 cta。
 `info.header=false` 可以单页关掉系列页眉。
 
+### 锁住手改的版式、图标、插画要求
+
+手改过的键写进这页的 `locked`，之后不管这页内容改没改、加没加 `--reset`，重新规划都照样保留。
+
+```json
+{"n": 3, "layout": "rows_side", "icons": ["smartphone", "cpu", "message-circle"], "locked": ["layout", "icons", "prompt"]}
+```
+
+- `layout` 锁住版式。内容超出这个版式的容量时也不换，`capacity_warnings` 照常写出来，由人决定拆页还是删减
+- `icons` 锁住图标
+- `prompt` 锁住这页插画的提示词（plan.json `assets` 里那张 hero 的 `prompt`）
+
+换了版式以后，这页的图标、要不要插画都跟着版式变，用 `plan_deck.py $W --replan 3` 只重新规划第 3 页（锁住的键不动）。锁和页码对应，调整页序后要重新检查。
+
+内容装不下第一选择的版式、被自动换掉时，这页会写 `layout_auto`，比如 `{"wanted": "steps_flow", "reason": ["6 条 items，steps_flow 需要 2 到 5 条"]}`，告诉人本来想用什么、为什么换了。
+
 ## free 版式的元素格式
 
 ```json
