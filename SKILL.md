@@ -151,7 +151,7 @@ python3 $S/photo_assets.py drop   $W hero_01               # 退回插画
 
 ## 局部修改
 
-- **单页重做**：改 plan.json 里那一页的 `layout`、`icons`，或改 `prompts/hero_NN.md`，再 `make_assets.py $W --only hero_NN --force` 和 `pipeline.py $W`
+- **单页重做**：改 plan.json 里那一页的 `layout`、`icons`，或改 `prompts/hero_NN.md`，再 `make_assets.py $W --only hero_NN --force` 和 `pipeline.py $W`。手改的键写进这页的 `locked` 就不会被之后的重新规划覆盖，换了版式用 `plan_deck.py $W --replan N` 只重排这一页（见 `references/layouts.md`）
 - **换风格**：换 style.json（参考图或 `style_previews.py --apply`），插画 `--force` 重出，deck.json 和 plan.json 可以沿用
 - **特殊页面**：该页 layout 设为 `free`，在 deck.json 或 plan 里直接写 `elements`（格式见 `references/layouts.md`）
 - **只要轻度美化**：`plan_deck.py $W --level light`，不出插画

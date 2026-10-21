@@ -137,7 +137,9 @@ def main():
     ap.add_argument("--reset", action="store_true",
                     help="re-plan every slide; by default slides whose deck.json content did not change keep their "
                          "existing plan (layout, icons, hand-edited hero prompts)")
+    ap.add_argument("--replan", help="page numbers to re-plan even if their content did not change, e.g. 3,7")
     a = ap.parse_args()
+    replan = {int(x) for x in a.replan.split(",") if x.strip()} if a.replan else set()
     work = Path(a.work)
     deck = load_json(work / "deck.json")
     meta = deck.get("meta", {})
@@ -149,6 +151,14 @@ def main():
     glyph = (meta.get("anchor") or {}).get("glyph") or (first.upper() if first else None)
     topic = meta.get("topic") or meta.get("title", "")
     slides, assets = [], []
+    # what the user locked on a page ("locked": ["layout", "icons", "prompt"]) survives any re-plan, --reset too
+    old_path = work / "plan.json"
+    old_plan = load_json(old_path) if old_path.exists() else {}
+    old_by_n = {p["n"]: p for p in old_plan.get("slides", [])}
+    old_hero = {}
+    for x in old_plan.get("assets", []):
+        for it in (x.get("items", []) if x.get("kind") == "sheet" else [x]):
+            old_hero[it["id"]] = it
     try:
         _st = load_json(work / "style.json")
         style_prefs = _st.get("prefer_layouts", {})
@@ -183,6 +193,9 @@ def main():
         short = items_ and 2 <= len(items_) <= 6 and all(len((it.get("text") or "") + (it.get("title") or "")) <= 22 for it in items_)
         if s.get("type") == "list" and short:
             cands = ["grid_cards", "list_icons"]  # few short points read better as big cards
+        first_choice = cands[0]
+        op = old_by_n.get(s["n"]) or {}
+        locked = set(op.get("locked", []))
         import capacity
         capacity.set_projection(meta.get("projection"))
         fits = [c for c in cands if not capacity.check(s, c)]
@@ -194,6 +207,8 @@ def main():
         layout = s.get("layout") or cands[0]
         if layout == prev and len(cands) > 1 and not s.get("layout"):
             layout = cands[1] if not capacity.check(s, cands[1]) else layout
+        if "layout" in locked and op.get("layout"):
+            layout = op["layout"]  # kept even when the content no longer fits; capacity_warnings says so
         prev = layout
         cap_probs = capacity.check(s, layout)
         items = s.get("items", [])
@@ -208,10 +223,18 @@ def main():
         else:
             src = s.get("callout") or s.get("lead") or s.get("pill") or s.get("cta") or ""
             icons.append(pick_icon(src, used, defaults[0]))
+        if "icons" in locked and op.get("icons"):
+            icons = list(op["icons"])
         ps = {"n": s["n"], "layout": layout, "icons": icons,
               "purpose": s.get("purpose", ""), "focus": FOCUS.get(layout, ""), "relation": ""}
         if cap_probs:
             ps["capacity_warnings"] = cap_probs
+        if not s.get("layout") and "layout" not in locked and layout != first_choice:
+            why = capacity.check(s, first_choice)
+            if why:  # say why the page did not get the layout its type asks for first
+                ps["layout_auto"] = {"wanted": first_choice, "reason": why}
+        if locked:
+            ps["locked"] = sorted(locked)
         if s.get("lead"):
             ps["lead_icon"] = pick_icon(s["lead"], set(), "message-circle")
         if s.get("takeaway"):
@@ -237,6 +260,8 @@ def main():
             assets.append({"id": hid, "kind": "hero", "slide": s["n"], "size": [w, h], "transparent": True,
                            "prompt": idea.format(anchor=anchor, topic=topic),
                            "fallback": {"scene": scene, "glyph": glyph if scene == "tile" else None}})
+            if "prompt" in locked and old_hero.get(op.get("hero")):
+                assets[-1]["prompt"] = old_hero[op["hero"]]["prompt"]
             ps["hero"] = hid
             if arts:
                 assets[-1]["art"] = pick_art(asked)
@@ -253,16 +278,15 @@ def main():
             rest.append({"id": f"sheet_{k // 4 + 1:02d}", "kind": "sheet", "items": grp})
         assets = rest
     # keep hand edits: a slide whose content is unchanged since the last plan keeps its old plan entry
-    # (notes and the uid are not content: adding a uid to an old deck must not re-plan every page)
+    # (notes, the uid and the page's animation do not change its layout: editing them must not re-plan it)
     import hashlib
     import json as _json
     def h(sl):
-        return hashlib.sha1(_json.dumps({k: v for k, v in sl.items() if k not in ("notes", "uid")}, ensure_ascii=False,
+        return hashlib.sha1(_json.dumps({k: v for k, v in sl.items() if k not in ("notes", "uid", "animation")}, ensure_ascii=False,
                                         sort_keys=True).encode("utf-8")).hexdigest()[:12]
     deck_by_n = {sl["n"]: sl for sl in deck["slides"]}
     for ps in slides:
         ps["src_hash"] = h(deck_by_n[ps["n"]])
-    old_path = work / "plan.json"
     kept = []
     if old_path.exists() and not a.reset:
         old = load_json(old_path)
@@ -273,7 +297,7 @@ def main():
                 old_assets[it["id"]] = it
         for k, ps in enumerate(slides):
             op = old_slides.get(ps["n"])
-            if op and op.get("src_hash") == ps["src_hash"]:
+            if op and op.get("src_hash") == ps["src_hash"] and ps["n"] not in replan:
                 slides[k] = op
                 kept.append(ps["n"])
                 hid = op.get("hero")
