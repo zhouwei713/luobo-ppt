@@ -7,7 +7,7 @@
 </picture>
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-2.7.3-F97316)](#更新记录)
+[![Version](https://img.shields.io/badge/version-2.7.4-F97316)](#更新记录)
 [![Output](https://img.shields.io/badge/Output-原生可编辑%20.pptx-1F7A55)](#效果示例)
 [![Runtime](https://img.shields.io/badge/Runtime-Claude%20·%20Codex%20·%20Gemini%20CLI%20·%20Cursor%20·%20Copilot-0E5A3E)](#安装)
 [![Agent Skills](https://img.shields.io/badge/Agent%20Skills-SKILL.md-green)](https://agentskills.io)
@@ -355,6 +355,7 @@ AI 最容易偷懒的地方恰好是这些看不见的规矩。所以这个 Skil
 
 ## 更新记录
 
+- 2.7.4 大数字页的数字很宽时（比如“≤ 0.5 元 / 秒”），两行说明改排到数字下方，不再被挤出页面；QA 遇到页面外的文本框不再中途崩溃，整块在页面外或宽度为负的文字报 ERROR
 - 2.7.3 主色是亮黄、珊瑚红这类浅色时：结尾页留在主色上配深色字，标签底用主色，主色块上的小字改深色，淡到看不见的连接线换成深色品牌色，QA 会提醒看不见的连接线
 - 2.7.2 品牌主色是橙、黄这类浅色时，文字和大数字按手册的颜色顺序退到下一个读得清的品牌色，结尾页这类深色底改用最深的品牌色
 - 2.7.1 品牌稿内页可以照手册用文字页眉，IP 形象按页挑选、按动作匹配内容，不再每页都放

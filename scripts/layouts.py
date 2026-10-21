@@ -327,21 +327,31 @@ def statement_number(s, ctx):
     x = MX + 0.1
     top = CONTENT_Y + 0.2
     lines = s.get("lines", [])
+    full_w = right - x
+    stacked = False
     if num:
-        nw = max(1.6, 1.1 * len(num))
-        els += brush_behind(ctx, x - 0.2, top + 1.05, nw + 0.5, 1.15)
-        els.append(T(num, x, top - 0.25, nw, 2.5, min(160, int(150 / max(1, len(num) ** 0.5))), "highlight", True,
-                     "display", align="c", valign="m", ls=1.0))
-        lx = x + nw + 0.35
+        ns = min(160, int(150 / max(1, len(num) ** 0.5)))
+        nw = max(1.6, text_width_pt(num, ns, True, DISPLAY_LATIN) / 72 + 0.3)
+        # a wide number ("≤ 0.5 元 / 秒") leaves no room beside it: lines go underneath
+        stacked = bool(lines) and full_w - nw - 0.35 < 2.6
+        if nw > full_w or stacked:
+            ns = fit_size(num, full_w - 0.3, 1.4, ns, 40, bold=True, max_lines=1, latin_scale=DISPLAY_LATIN)
+            nw = min(full_w, text_width_pt(num, ns, True, DISPLAY_LATIN) / 72 + 0.3)
+        nh = 1.6 if stacked else 2.5
+        ny = top - 0.25
+        els += brush_behind(ctx, x - 0.2, ny + nh * 0.52, nw + 0.5, nh * 0.46)
+        els.append(T(num, x, ny, nw, nh, ns, "highlight", True, "display", align="l" if stacked else "c", valign="m", ls=1.0))
+        lx = x if stacked else x + nw + 0.35
     else:
         lx = x
     lw = right - lx
     if lines:
         joined = "\n".join(lines)
-        ls_ = fit_size(joined, lw, 1.9, 42, 22, bold=True)
-        els.append(T(joined, lx, top + 0.05, lw, 1.9, ls_, "text", True, "heading", valign="m", ls=1.3))
+        ly, lh = (top + 1.45, 1.2) if stacked else (top + 0.05, 1.9)
+        ls_ = fit_size(joined, lw, lh, 42, 18 if stacked else 22, bold=True)
+        els.append(T(joined, lx, ly, lw, lh, ls_, "text", True, "heading", valign="m", ls=1.3))
     if s.get("body"):
-        by = top + 2.35
+        by = top + (2.8 if stacked else 2.35)
         bw = right - x
         els.append(T(s["body"], x, by, bw, 0.9, body_size(s["body"], bw, 0.9, 20, 13), "muted", False, valign="t", ls=1.4))
     if hero:

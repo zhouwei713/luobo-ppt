@@ -11,7 +11,7 @@ Checks
   overflow   text needs more height than its box (measured with CJK font metrics) = ERROR
   overlap    two text boxes intersect = ERROR; text over the opaque part of an
              illustration = WARN
-  bounds     element outside the slide = WARN
+  bounds     element outside the slide = WARN; a text box off the slide or with no size = ERROR
   contrast   text vs what is under it below WCAG thresholds = WARN
   tiny       font below 10pt = WARN
   animation  a build pointing at a missing shape = ERROR; more than 6 clicks on one page = WARN
@@ -100,7 +100,10 @@ def sample_bg(path, box):
     im = _BG_CACHE[path]
     x0, y0, x1, y1 = box
     sx, sy = 400 / CANVAS_W, 225 / CANVAS_H
-    crop = im.crop((int(max(0, x0) * sx), int(max(0, y0) * sy), int(min(CANVAS_W, x1) * sx) + 1, int(min(CANVAS_H, y1) * sy) + 1))
+    l, r = sorted((min(max(x0, 0), CANVAS_W), min(max(x1, 0), CANVAS_W)))
+    t, b = sorted((min(max(y0, 0), CANVAS_H), min(max(y1, 0), CANVAS_H)))
+    l, t = min(int(l * sx), 399), min(int(t * sy), 224)
+    crop = im.crop((l, t, max(min(int(r * sx) + 1, 400), l + 1), max(min(int(b * sy) + 1, 225), t + 1)))
     import numpy as np
     arr = np.asarray(crop).reshape(-1, 3)
     if not len(arr):
@@ -360,7 +363,9 @@ def main():
                 continue
             x, y = e["x"], e["y"]
             w, h = e.get("w", e.get("size", 0)), e.get("h", e.get("size", 0))
-            if x < -0.01 or y < -0.01 or x + w > CANVAS_W + 0.01 or y + h > CANVAS_H + 0.01:
+            if e["t"] == "text" and (w <= 0 or h <= 0 or x >= CANVAS_W or y >= CANVAS_H or x + w <= 0 or y + h <= 0):
+                add("ERROR", n, "bounds", f"text {e.get('text', '')[:18]!r} is off the slide or has no size at ({x:.2f},{y:.2f},{w:.2f},{h:.2f})")
+            elif x < -0.01 or y < -0.01 or x + w > CANVAS_W + 0.01 or y + h > CANVAS_H + 0.01:
                 add("WARN", n, "bounds", f"{e['t']} outside slide at ({x:.2f},{y:.2f},{w:.2f},{h:.2f})")
         for e in texts:
             ls_ = DISPLAY_LATIN if e.get("font") == "display" else 1.0
