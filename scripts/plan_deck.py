@@ -253,10 +253,11 @@ def main():
             rest.append({"id": f"sheet_{k // 4 + 1:02d}", "kind": "sheet", "items": grp})
         assets = rest
     # keep hand edits: a slide whose content is unchanged since the last plan keeps its old plan entry
+    # (notes and the uid are not content: adding a uid to an old deck must not re-plan every page)
     import hashlib
     import json as _json
     def h(sl):
-        return hashlib.sha1(_json.dumps({k: v for k, v in sl.items() if k != "notes"}, ensure_ascii=False,
+        return hashlib.sha1(_json.dumps({k: v for k, v in sl.items() if k not in ("notes", "uid")}, ensure_ascii=False,
                                         sort_keys=True).encode("utf-8")).hexdigest()[:12]
     deck_by_n = {sl["n"]: sl for sl in deck["slides"]}
     for ps in slides:
