@@ -7,7 +7,7 @@
 </picture>
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-2.8.1-F97316)](#更新记录)
+[![Version](https://img.shields.io/badge/version-2.8.2-F97316)](#更新记录)
 [![Output](https://img.shields.io/badge/Output-原生可编辑%20.pptx-1F7A55)](#效果示例)
 [![Runtime](https://img.shields.io/badge/Runtime-Claude%20·%20Codex%20·%20Gemini%20CLI%20·%20Cursor%20·%20Copilot-0E5A3E)](#安装)
 [![Agent Skills](https://img.shields.io/badge/Agent%20Skills-SKILL.md-green)](https://agentskills.io)
@@ -355,6 +355,7 @@ AI 最容易偷懒的地方恰好是这些看不见的规矩。所以这个 Skil
 
 ## 更新记录
 
+- 2.8.2 `render_lite.py --pages 3,7` 只重画指定的页，其余页的预览图保留，改一页不必整份重画
 - 2.8.1 没装 LibreOffice 时风格样张改用近似预览，生成路线挑风格这一步不再中断；样张脚本读子进程输出不再在中文 Windows 上报 GBK 解码错误
 - 2.8.0 plan.json 每页可以用 `locked` 锁住手改的版式、图标、插画提示词，重新规划（包括 `--reset`）时照样保留；`plan_deck.py --replan 3,7` 只重排指定的页；内容装不下、自动换了版式时写 `layout_auto` 说明原因；改一页的动画不再触发重排
 - 2.7.7 给旧稿子的页补上 `uid` 不再让 plan_deck 判定内容变了，手改过的版式规划照样保留

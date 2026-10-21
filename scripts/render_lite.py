@@ -465,14 +465,19 @@ def main():
     ap.add_argument("work")
     ap.add_argument("--dpi", type=int, default=80)
     ap.add_argument("--cols", type=int, default=3)
+    ap.add_argument("--pages", help="draw only these pages (e.g. 3,7) and keep the other previews; no contact sheet")
     a = ap.parse_args()
     work = Path(a.work).resolve()
     dump = load_json(work / "out" / "layout_dump.json")
     style = load_style(work / "style.json")
     out = work / "out" / "png"
     out.mkdir(parents=True, exist_ok=True)
+    total = len(dump["slides"])
+    only = {int(x) for x in a.pages.split(",") if x.strip()} if a.pages else None
     for f in out.glob("slide-*.png"):
-        f.unlink()
+        n = int(f.stem.split("-")[1]) if f.stem.split("-")[1].isdigit() else 0
+        if only is None or n in only or n > total:  # pages past the end belong to a longer old deck
+            f.unlink()
     # pictures in the dump are relative to the work dir
     cwd = os.getcwd()
     os.chdir(work)
@@ -480,12 +485,17 @@ def main():
         p = Painter(style, work, a.dpi)
         files = []
         for i, sd in enumerate(dump["slides"], 1):
+            if only is not None and i not in only:
+                continue
             f = out / f"slide-{i:02d}.png"
             p.slide(sd).save(f)
             files.append(f)
             print(f)
     finally:
         os.chdir(cwd)
+    if only is not None:
+        print("NOTE 只画了指定的页，其余页的预览图保留原样，没有拼总览图")
+        return
     from render import contact_sheet
     contact_sheet(files, work / "out" / "sheet.png", a.cols)
     print("sheet:", work / "out" / "sheet.png")
