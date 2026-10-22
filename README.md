@@ -7,7 +7,7 @@
 </picture>
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-2.8.2-F97316)](#更新记录)
+[![Version](https://img.shields.io/badge/version-2.9.0-F97316)](#更新记录)
 [![Output](https://img.shields.io/badge/Output-原生可编辑%20.pptx-1F7A55)](#效果示例)
 [![Runtime](https://img.shields.io/badge/Runtime-Claude%20·%20Codex%20·%20Gemini%20CLI%20·%20Cursor%20·%20Copilot-0E5A3E)](#安装)
 [![Agent Skills](https://img.shields.io/badge/Agent%20Skills-SKILL.md-green)](https://agentskills.io)
@@ -59,6 +59,12 @@
 左边是原稿，右边是换上暖橙风格之后的样子。标题和数字一个没动，柱状图还是能改数据的原生图表。
 
 ![一页图表美化前后](docs/images/before-after-chart.png)
+
+### 套用公司自己的模板
+
+给它一份公司的 .pptx 或 .potx 模板，它直接在模板上出稿。母版上的 logo、色条、页脚每页都在，颜色和字体跟着模板主题走，内容只排在 logo 和色条让出来的地方。红色封面、深色模板也能自动换一套看得清的字色。
+
+![在公司模板上出稿](docs/images/company-template.jpg)
 
 ### 文字一个不动，换身衣服
 
@@ -287,6 +293,10 @@ cd ~/.claude/skills/luobo-ppt && git pull   # 换成你实际的安装目录
 这份 PPT 要在会议室投影，用投影模式，字号大一点。
 ```
 
+```text
+这是我们公司的 PPT 模板，用它把这份周报做成 PPT。
+```
+
 赶时间可以加一句"快速模式"，它会跳过中间的确认环节。
 
 ---
@@ -355,6 +365,7 @@ AI 最容易偷懒的地方恰好是这些看不见的规矩。所以这个 Skil
 
 ## 更新记录
 
+- 2.9.0 支持在公司自己的 PPT 模板（.pptx / .potx）上出稿：母版上的背景、logo、色条、页脚原样保留，配色和字体从模板主题里来，内容只排在母版图形让出来的区域里；红色封面、深色结尾页这类版式自动换一套配得上的颜色；`template_kit.py read` 出一张确认卡（[#22](https://github.com/zhouwei713/luobo-ppt/issues/22)）
 - 2.8.2 `render_lite.py --pages 3,7` 只重画指定的页，其余页的预览图保留，改一页不必整份重画
 - 2.8.1 没装 LibreOffice 时风格样张改用近似预览，生成路线挑风格这一步不再中断；样张脚本读子进程输出不再在中文 Windows 上报 GBK 解码错误
 - 2.8.0 plan.json 每页可以用 `locked` 锁住手改的版式、图标、插画提示词，重新规划（包括 `--reset`）时照样保留；`plan_deck.py --replan 3,7` 只重排指定的页；内容装不下、自动换了版式时写 `layout_auto` 说明原因；改一页的动画不再触发重排

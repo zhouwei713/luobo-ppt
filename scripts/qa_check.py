@@ -28,12 +28,13 @@ Writes WORK_DIR/out/qa_report.json (an old one is removed first, so a crash leav
 Exit code 1 when any ERROR, 2 when the check itself crashed.
 """
 import argparse
+import json
 import re
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from common import (load_json, save_json, load_style, wrap_lines, contrast, rgb_to_hex, text_width_pt, DISPLAY_LATIN, WIDTH_SAFETY, LINE_PITCH,  # noqa: E402
+from common import (page_style, load_json, save_json, load_style, wrap_lines, contrast, rgb_to_hex, text_width_pt, DISPLAY_LATIN, WIDTH_SAFETY, LINE_PITCH,  # noqa: E402
                     mix, CANVAS_W, CANVAS_H)
 
 from pptx import Presentation  # noqa: E402
@@ -363,6 +364,7 @@ def main():
 
     # ---------------- geometry
     for sd in dump["slides"]:
+        pst = page_style(sd, style)  # a company template's red cover or dark closing has its own palette
         n = sd["n"]
         els = sd["elements"]
         texts = [e for e in els if e["t"] == "text" and e.get("role") != "decor"]  # watermarks are decoration
@@ -411,7 +413,8 @@ def main():
                     add("WARN", n, "overlap", f"text {t['text'][:18]!r} sits on illustration {Path(himg['path']).name}")
         # contrast
         bg_img = next((e["path"] for e in els if e.get("role") == "background" and e["t"] == "image"), None)
-        bg_fill = next((style.c(e["fill"]) for e in els if e.get("role") == "background" and e["t"] == "rect"), "FFFFFF")
+        bg_fill = next((pst.c(e["fill"]) for e in els if e.get("role") == "background" and e["t"] == "rect"),
+                       pst.c("bg_top") if sd.get("template") else "FFFFFF")
         for idx, t in enumerate(els):
             if t["t"] != "text" or t.get("role") == "decor":
                 continue
@@ -424,24 +427,25 @@ def main():
                         break
             if under:
                 behind = sample_bg(bg_img, (cx - 0.3, cy - 0.1, cx + 0.3, cy + 0.1)) if bg_img else bg_fill
-                col = mix(behind, style.c(under["fill"]), under.get("alpha", 1.0))
+                col = mix(behind, pst.c(under["fill"]), under.get("alpha", 1.0))
             else:
                 col = sample_bg(bg_img, (t["x"], t["y"], t["x"] + t["w"], t["y"] + t["h"])) if bg_img else bg_fill
-            cr = contrast(style.c(t["color"]), col)
+            cr = contrast(pst.c(t["color"]), col)
             large = t["size"] >= 18 or (t.get("bold") and t["size"] >= 14)
             need = 3.0 if large else 4.5
             if cr < need:
-                add("WARN", n, "contrast", f"{t['text'][:24]!r} contrast {cr:.1f} < {need} (text #{style.c(t['color'])} on #{col})")
+                add("WARN", n, "contrast", f"{t['text'][:24]!r} contrast {cr:.1f} < {need} (text #{pst.c(t['color'])} on #{col})")
 
     # ---------------- structural lines that vanish into the page (a pale yellow connector on white)
     for sd in dump["slides"]:
-        bgc = style.c("bg_top")
+        pst = page_style(sd, style)
+        bgc = pst.c("bg_top")
         for e in sd["elements"]:
             if e.get("t") == "line" and e.get("lw", 1.5) >= 1.0 and e.get("role") not in ("decor", "background") \
                     and sd.get("master", "content") == "content":
-                col = style.c(e.get("color", "line"))
-                if style.brand and contrast(col, bgc) < 1.5:
-                    col = style.c("primary_dark")  # what build_deck draws instead
+                col = pst.c(e.get("color", "line"))
+                if pst.brand and contrast(col, bgc) < 1.5:
+                    col = pst.c("primary_dark")  # what build_deck draws instead
                 if contrast(col, bgc) < 1.25:
                     add("WARN", sd["n"], "contrast", f"连接线 #{col} 在底色 #{bgc} 上几乎看不见")
                     break

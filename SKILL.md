@@ -1,6 +1,6 @@
 ---
 name: luobo-ppt
-description: 做 PPT 和美化 PPT 的一站式 skill，输出可编辑的原生 .pptx。从零生成时，给一个题目、一篇文章或口播稿、一份大纲，产出结论式标题、带口播备注、风格统一的 PPT；按参考图美化时，给一份朴素的 .pptx 和一张参考图，文字一字不改地换上统一的配色、母版、版式、图标和插画。当用户说"做个PPT""把这篇文章做成PPT""生成口播PPT""美化PPT""照这张图的风格改PPT""套个风格""make slides""beautify my deck"，或丢来 pptx、文章、大纲时，务必使用此skill。生图模型可配置；没配置时先问用户，可以现场接入模型、搜可商用的公开图库实拍图、用自己的素材，或用程序化插画。口播和讲课的稿子自带逐条出现的动画。
+description: 做 PPT 和美化 PPT 的一站式 skill，输出可编辑的原生 .pptx。从零生成时，给一个题目、一篇文章或口播稿、一份大纲，产出结论式标题、带口播备注、风格统一的 PPT；按参考图美化时，给一份朴素的 .pptx 和一张参考图，文字一字不改地换上统一的配色、母版、版式、图标和插画。当用户说"做个PPT""把这篇文章做成PPT""生成口播PPT""美化PPT""照这张图的风格改PPT""套个风格""用公司模板做""make slides""beautify my deck"，或丢来 pptx、potx 模板、文章、大纲时，务必使用此skill。生图模型可配置；没配置时先问用户，可以现场接入模型、搜可商用的公开图库实拍图、用自己的素材，或用程序化插画。口播和讲课的稿子自带逐条出现的动画。
 ---
 
 # 萝卜 PPT（luobo-ppt）
@@ -24,6 +24,7 @@ description: 做 PPT 和美化 PPT 的一站式 skill，输出可编辑的原生
    - 给的是题目、文章、口播稿、大纲或其他素材，要做成 PPT → 路线 B 生成
    - 给了 .pptx 但要重写内容、调整结构 → 路线 B，把 pptx 当素材读
    - 另外给了企业 VI 手册、品牌规范，或者说"按公司 VI 做""用我们的品牌色"→ 两条路线都先做"品牌套件"，风格从手册来，不再读参考图、不出风格样张
+   - 另外给了公司的 PPT 模板（.pptx 或 .potx），或者说"用公司模板做""套我们的模板"→ 两条路线都先做"公司模板"，在模板上出稿，不再读参考图、不出风格样张。模板和 VI 手册同时给时以模板为准，手册只拿来核对颜色
 2. **环境自检**，之前通过的话一秒内结束，否则自动补装依赖。退出码非 0 就把建议告诉用户并停下；只缺推荐组件（如 LibreOffice）可以继续，pipeline 会改用 `render_lite.py` 按排版数据直接画近似预览，排版、配色、溢出照样能看，交付时说明预览是近似图。想跳过 LibreOffice 提速也可以加 `--lite`。
    ```bash
    python3 $S/setup_check.py --quick --install
@@ -51,6 +52,15 @@ description: 做 PPT 和美化 PPT 的一站式 skill，输出可编辑的原生
 4. **定动画**：口播稿、讲课按 `scenario` 默认就是逐条点击出现，汇报默认只有翻页效果，一般不用写。用户提了要求或场景特殊再写 `meta.animation`（`none`、`transition`、`auto`、`click`），说明见 `references/deck_schema.md` 的"动画"一节。
 5. **定风格**：有参考图走路线 A 第 2 步；没有就 `python3 $S/style_previews.py $W --auto` 出三张样张（用户自己的封面和内容页），发 `previews/sheet.png` 让用户挑，再 `--apply <id>`。预设在 `references/styles/`，共十四套，每套的硬规则排版时要遵守。要在会议室投影的，在 `meta` 里写 `"projection": true`，字号下限会抬高。
 6. 接着走下面的"版式、出图与检查"。
+
+## 公司模板（有 .pptx / .potx 模板时）
+
+用户给的模板直接当底稿，母版上的背景、logo、色条、页脚原样留在每一页，配色和字体从模板主题里来，内容只排在母版图形让出来的区域里。规则见 `references/template.md`。
+
+1. **读模板** `python3 $S/template_kit.py read 模板.pptx $W`。模板里的示例页会去掉，只留母版和版式；写出 `template.json`、`style.json` 和 `template/template_card.png`。旧版 .ppt / .pot 先让用户在 PowerPoint 里另存为 .pptx。
+2. **看确认卡**：封面、章节页、内容页、结尾页各用模板的哪个版式，红框是内容能放的区域，下面是主色、强调色、字体。把确认卡发给用户。终端里的 NOTE 要转告用户，常见的有：主题色还是 PowerPoint 默认的蓝橙（主色可能不是公司色）、模板不是 16:9（内容会缩小，上下留白）、版式中间有图形（内容可能压上去）。
+3. **改了 template.json 就重新生成风格** `python3 $S/template_kit.py apply $W`。主色、强调色、每类页面用哪个版式（`use`）、每个版式的可用区域（`free`，英寸）都能手改。
+4. 回到原来的路线继续，跳过读参考图和挑风格。页眉 logo 和页脚由模板负责，不要写进 `stamps`。
 
 ## 品牌套件（有企业 VI 手册时）
 
@@ -174,6 +184,7 @@ python3 $S/photo_assets.py drop   $W hero_01               # 退回插画
 | `scripts/layout_info.py` | 查版式容量和 deck.json 示例，`--check $W` 逐页查超容量 |
 | `references/style_extraction.md` | 从参考图读出 style.json |
 | `references/brand.md` | 企业 VI 手册做成品牌套件：brand.json 字段、logo 规则、品牌检查 |
+| `references/template.md` | 在公司 .pptx / .potx 模板上出稿：template.json 字段、版式怎么选、可用区域怎么算 |
 | `references/styles/` | 十四套风格预设（index.json + 每套 json，含硬规则和 imagery 标签），样张在 `assets/style_gallery.jpg`（第 N 行对应 index.json 里的 gallery_row） |
 | `references/image_prompts.md` | 视觉锚点和插画提示词 |
 | `references/imagegen_config.md` | 生图接口配置 |

@@ -24,7 +24,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from common import (load_json, load_style, wrap_lines, get_font, hex_to_rgb, mix, CANVAS_W, CANVAS_H,  # noqa: E402
+from common import (page_style, load_json, load_style, wrap_lines, get_font, hex_to_rgb, mix, CANVAS_W, CANVAS_H,  # noqa: E402
                     LINE_PITCH)
 
 SS = 2  # supersampling: draw at 2x, shrink at the end for smooth edges
@@ -72,6 +72,8 @@ class Painter:
         self.work = Path(work)
         self.px = dpi * SS  # pixels per inch on the working canvas
         self.W, self.H = round(CANVAS_W * self.px), round(CANVAS_H * self.px)
+        tj = self.work / "template.json"
+        self.tpl = load_json(tj) if (style.data.get("template") and tj.exists()) else None
 
     # ---------------------------------------------------------- helpers
     def P(self, v):
@@ -435,7 +437,35 @@ class Painter:
 
     # ---------------------------------------------------------- slide
     def slide(self, sd):
+        tp = sd.get("template")
+        if tp:
+            return self.template_slide(sd, tp)
         im = Image.new("RGBA", (self.W, self.H), self.rgba("bg_bottom"))
+        self.draw(im, sd)
+        return im.convert("RGB").resize((self.W // SS, self.H // SS), Image.LANCZOS)
+
+    def template_slide(self, sd, tp):
+        """A company template page: the template's own layout picture (when template_kit could
+        render one) or its page colour underneath, the content scaled into the free area on top."""
+        base_s = self.S
+        self.S = page_style(sd, base_s)
+        W, H = self.tpl["size"] if self.tpl else (CANVAS_W, CANVAS_H)
+        tw, th = round(W * self.px), round(H * self.px)
+        lay = (self.tpl or {}).get("layouts", {}).get(str(tp.get("layout_index")), {})
+        prev = lay.get("preview")
+        if prev and Path(prev).exists():
+            page = Image.open(prev).convert("RGBA").resize((tw, th), Image.LANCZOS)
+        else:
+            page = Image.new("RGBA", (tw, th), self.rgba("bg_bottom"))
+        im = Image.new("RGBA", (self.W, self.H), (0, 0, 0, 0))
+        self.draw(im, sd)
+        k, ox, oy = tp["frame"]
+        im = im.resize((max(1, round(self.W * k)), max(1, round(self.H * k))), Image.LANCZOS)
+        page.alpha_composite(im, (round(ox * self.px), round(oy * self.px)))
+        self.S = base_s
+        return page.convert("RGB").resize((tw // SS, th // SS), Image.LANCZOS)
+
+    def draw(self, im, sd):
         for e in sd["elements"]:
             t = e["t"]
             try:
@@ -457,7 +487,6 @@ class Painter:
                     self.chart(im, e)
             except Exception as ex:  # one odd element should not cost the whole preview
                 print(f"  slide {sd['n']}: skipped {t} ({ex})")
-        return im.convert("RGB").resize((self.W // SS, self.H // SS), Image.LANCZOS)
 
 
 def main():

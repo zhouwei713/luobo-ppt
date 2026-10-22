@@ -8,7 +8,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
-SKILL_VERSION = "2.8.2"
+SKILL_VERSION = "2.9.0"
 SKILL_DIR = Path(__file__).resolve().parent.parent
 # bundled icons and gallery: <skill>/assets, or <skill>/scripts/assets in packages whose
 # platform only allows SKILL.md + references/ + scripts/ + templates/ (WorkBuddy)
@@ -256,6 +256,24 @@ class Style:
         # the manual's order (primary, secondary, accent, extra), with colours that barely show on
         # the card (a light yellow on white) moved to the end
         return [c for c in cols if contrast(c, surf) >= 1.6] + [c for c in cols if contrast(c, surf) < 1.6]
+
+
+_PAGE_STYLES = {}
+
+
+def page_style(sd, base):
+    """The style a page was built with: the deck's, or a template layout's own palette."""
+    tp = sd.get("template")
+    if not tp or not tp.get("palette"):
+        return base
+    key = json.dumps([tp.get("palette"), tp.get("decor")], sort_keys=True)
+    if key not in _PAGE_STYLES:
+        d = json.loads(json.dumps(base.data))
+        d["palette"] = tp["palette"]
+        if tp.get("decor"):
+            d["decor"] = tp["decor"]
+        _PAGE_STYLES[key] = Style(d)
+    return _PAGE_STYLES[key]
 
 
 def load_style(path):
