@@ -10,6 +10,7 @@ only backgrounds, illustrations, icons and brush strokes are pictures.
 Also writes out/layout_dump.json (every element) for qa_check.py.
 """
 import argparse
+import json
 import copy
 import re
 import sys
@@ -41,6 +42,7 @@ class Builder:
         self.meta = meta
         self.assets = assets
         self.k = slide_w_in / CANVAS_W
+        self.ox = self.oy = 0.0  # inches; a company template shifts and shrinks the canvas into its free area
         self.icon_cache = self.work / "assets" / "_icons"
         self.icon_cache.mkdir(parents=True, exist_ok=True)
         self.warnings = []
@@ -48,6 +50,16 @@ class Builder:
     # ---------------------------------------------------------- units
     def E(self, v):
         return Emu(int(round(v * self.k * 914400)))
+
+    def X(self, v):
+        return Emu(int(round((self.ox + v * self.k) * 914400)))
+
+    def Y(self, v):
+        return Emu(int(round((self.oy + v * self.k) * 914400)))
+
+    def frame(self, k, ox=0.0, oy=0.0):
+        """Where the 13.333 x 7.5 canvas lands on this slide: scale k, offset (ox, oy) in inches."""
+        self.k, self.ox, self.oy = k, ox, oy
 
     def pt(self, v):
         return Pt(round(v * self.k * 2) / 2)
@@ -119,7 +131,7 @@ class Builder:
 
     # ---------------------------------------------------------- element renderers
     def text(self, slide, e):
-        tb = slide.shapes.add_textbox(self.E(e["x"]), self.E(e["y"]), self.E(e["w"]), self.E(e["h"]))
+        tb = slide.shapes.add_textbox(self.X(e["x"]), self.Y(e["y"]), self.E(e["w"]), self.E(e["h"]))
         tf = tb.text_frame
         tf.word_wrap = True
         tf.auto_size = MSO_AUTO_SIZE.NONE
@@ -160,7 +172,7 @@ class Builder:
             kind = shapes[e["shape"]]
         else:
             kind = MSO_SHAPE.ROUNDED_RECTANGLE if e.get("radius") else MSO_SHAPE.RECTANGLE
-        shp = slide.shapes.add_shape(kind, self.E(e["x"]), self.E(e["y"]), self.E(e["w"]), self.E(e["h"]))
+        shp = slide.shapes.add_shape(kind, self.X(e["x"]), self.Y(e["y"]), self.E(e["w"]), self.E(e["h"]))
         self._strip_style(shp)
         if e.get("rot"):
             shp.rotation = e["rot"]
@@ -204,7 +216,7 @@ class Builder:
                 y += (h - nh) / 2
                 h = nh
             e.update(rx=x, ry=y, rw=w, rh=h)
-        return slide.shapes.add_picture(str(path), self.E(x), self.E(y), self.E(w), self.E(h))
+        return slide.shapes.add_picture(str(path), self.X(x), self.Y(y), self.E(w), self.E(h))
 
     def icon(self, slide, e):
         from fallback_art import tinted_icon
@@ -225,13 +237,13 @@ class Builder:
             pad = s * e.get("pad", 0.24)
         else:
             pad = 0
-        slide.shapes.add_picture(str(cache), self.E(e["x"] + pad), self.E(e["y"] + pad),
+        slide.shapes.add_picture(str(cache), self.X(e["x"] + pad), self.Y(e["y"] + pad),
                                  self.E(s - 2 * pad), self.E(s - 2 * pad))
 
     def line(self, slide, e):
         from pptx.enum.shapes import MSO_CONNECTOR
-        c = slide.shapes.add_connector(MSO_CONNECTOR.STRAIGHT, self.E(e["x1"]), self.E(e["y1"]),
-                                       self.E(e["x2"]), self.E(e["y2"]))
+        c = slide.shapes.add_connector(MSO_CONNECTOR.STRAIGHT, self.X(e["x1"]), self.Y(e["y1"]),
+                                       self.X(e["x2"]), self.Y(e["y2"]))
         self._strip_style(c)
         col = self.S.c(e.get("color", "line"))
         if self.S.brand and e.get("lw", 1.5) >= 1.0:
@@ -296,7 +308,7 @@ class Builder:
 
     def table(self, slide, e):
         rows, cols = len(e["rows"]) + 1, len(e["columns"])
-        gf = slide.shapes.add_table(rows, cols, self.E(e["x"]), self.E(e["y"]), self.E(e["w"]), self.E(e["h"]))
+        gf = slide.shapes.add_table(rows, cols, self.X(e["x"]), self.Y(e["y"]), self.E(e["w"]), self.E(e["h"]))
         tbl = gf.table
         # drop the built-in table style so only our colours show
         tblPr = tbl._tbl.tblPr
@@ -375,7 +387,7 @@ class Builder:
             xs = cd.add_series(sr.get("name", ""))
             for x, y in zip(sr.get("x", []), sr.get("values", [])):
                 xs.add_data_point(x, y)
-        gf = slide.shapes.add_chart(XL_CHART_TYPE.XY_SCATTER, self.E(e["x"]), self.E(e["y"]),
+        gf = slide.shapes.add_chart(XL_CHART_TYPE.XY_SCATTER, self.X(e["x"]), self.Y(e["y"]),
                                     self.E(e["w"]), self.E(e["h"]), cd)
         ch = gf.chart
         P = self.S
@@ -441,7 +453,7 @@ class Builder:
         for sr in series:
             vals = list(sr["values"])
             cd.add_series(sr.get("name", ""), vals[::-1] if kind == "bar" else vals)
-        gf = slide.shapes.add_chart(types.get(kind, XL_CHART_TYPE.COLUMN_CLUSTERED), self.E(e["x"]), self.E(e["y"]),
+        gf = slide.shapes.add_chart(types.get(kind, XL_CHART_TYPE.COLUMN_CLUSTERED), self.X(e["x"]), self.Y(e["y"]),
                                     self.E(e["w"]), self.E(e["h"]), cd)
         ch = gf.chart
         ch.font.size = self.pt(e.get("size", 12))
@@ -959,6 +971,71 @@ def fine_line(s):
 from common import TYPE_SCALE, LADDER, snap_size  # noqa: E402
 
 
+def template_kind(lname, info):
+    """Which template layout a page goes on: cover, section, closing or content."""
+    if lname == "section":
+        return "section"
+    m = info.get("master", "content")
+    return m if m in ("cover", "closing") else "content"
+
+
+def _els_box(els):
+    xs0, ys0, xs1, ys1 = [], [], [], []
+    for e in els:
+        if e.get("role") == "background":
+            continue
+        if e.get("t") == "line":
+            xs0.append(min(e["x1"], e["x2"])); xs1.append(max(e["x1"], e["x2"]))
+            ys0.append(min(e["y1"], e["y2"])); ys1.append(max(e["y1"], e["y2"]))
+        elif "x" in e and "w" in e:
+            w = e["w"] if "w" in e else e.get("size", 0)
+            h = e["h"] if "h" in e else e.get("size", 0)
+            xs0.append(e["x"]); ys0.append(e["y"]); xs1.append(e["x"] + w); ys1.append(e["y"] + h)
+        elif "x" in e and "size" in e:  # icons
+            xs0.append(e["x"]); ys0.append(e["y"]); xs1.append(e["x"] + e["size"]); ys1.append(e["y"] + e["size"])
+    if not xs0:
+        return None
+    return [max(0.0, min(xs0)), max(0.0, min(ys0)), min(CANVAS_W, max(xs1)), min(CANVAS_H, max(ys1))]
+
+
+def template_frames(tpl, pages, W, H):
+    """One placement of the 13.333 x 7.5 canvas per kind of page, so titles sit in the same place
+    on every content page: the natural size when everything already clears the template's logo,
+    bars and footer, otherwise shrunk and shifted just enough to fit the free area."""
+    boxes = {}
+    for s, ps, lname, info, els, _ in pages:
+        kind = template_kind(lname, info)
+        bx = _els_box(els)
+        if not bx:
+            continue
+        cur = boxes.get(kind)
+        boxes[kind] = bx if not cur else [min(cur[0], bx[0]), min(cur[1], bx[1]), max(cur[2], bx[2]), max(cur[3], bx[3])]
+    k0 = min(W / CANVAS_W, H / CANVAS_H)
+    out = {}
+    for kind in ("cover", "section", "content", "closing"):
+        ent = tpl["kinds"].get(kind) or tpl["kinds"]["content"]
+        fx0, fy0, fx1, fy1 = ent["free"]
+        ox, oy = (W - CANVAS_W * k0) / 2, (H - CANVAS_H * k0) / 2
+        bx = boxes.get(kind)
+        if not bx:
+            out[kind] = (k0, ox, oy)
+            continue
+        bx0, by0, bx1, by1 = bx
+        k = min(k0, (fx1 - fx0) / max(bx1 - bx0, 0.1), (fy1 - fy0) / max(by1 - by0, 0.1))
+        if k < k0:
+            ox, oy = (W - CANVAS_W * k) / 2, (H - CANVAS_H * k) / 2
+        if bx0 * k + ox < fx0:
+            ox = fx0 - bx0 * k
+        elif bx1 * k + ox > fx1:
+            ox = fx1 - bx1 * k
+        if by0 * k + oy < fy0:
+            oy = fy0 - by0 * k
+        elif by1 * k + oy > fy1:
+            oy = fy1 - by1 * k
+        out[kind] = (k, ox, oy)
+    return out
+
+
 def load_assets(work):
     man = Path(work) / "assets" / "manifest.json"
     out = {}
@@ -981,18 +1058,27 @@ def main():
     assets = load_assets(work)
     import common as _c
     _c.PROJECTION["on"] = bool(deck.get("meta", {}).get("projection"))
-    src = work / "source.pptx"
-    if src.exists():
-        sp = Presentation(str(src))
-        sw, sh = sp.slide_width, sp.slide_height
+    tpl = style.data.get("template")
+    if tpl:
+        # a company template: its masters, layouts and theme carry over, its sample slides do not
+        from template_kit import drop_slides, open_template
+        prs = open_template(tpl["file"])
+        drop_slides(prs)
+        sw, sh = prs.slide_width, prs.slide_height
+        blank = None
     else:
-        sw, sh = Inches(CANVAS_W), Inches(CANVAS_H)
-    if abs(sw / sh - 16 / 9) > 0.02:
-        print(f"NOTE source is {sw/914400:.2f}x{sh/914400:.2f} in (not 16:9); output uses 13.333x7.5 widescreen")
-        sw, sh = Inches(CANVAS_W), Inches(CANVAS_H)
-    prs = Presentation()
-    prs.slide_width, prs.slide_height = sw, sh
-    blank = prs.slide_layouts[6]
+        src = work / "source.pptx"
+        if src.exists():
+            sp = Presentation(str(src))
+            sw, sh = sp.slide_width, sp.slide_height
+        else:
+            sw, sh = Inches(CANVAS_W), Inches(CANVAS_H)
+        if abs(sw / sh - 16 / 9) > 0.02:
+            print(f"NOTE source is {sw/914400:.2f}x{sh/914400:.2f} in (not 16:9); output uses 13.333x7.5 widescreen")
+            sw, sh = Inches(CANVAS_W), Inches(CANVAS_H)
+        prs = Presentation()
+        prs.slide_width, prs.slide_height = sw, sh
+        blank = prs.slide_layouts[6]
     b = Builder(work, style, deck.get("meta", {}), assets, sw / 914400, sh / 914400)
     b.total = len(deck["slides"])
     plan_by_n = {p["n"]: p for p in plan.get("slides", [])}
@@ -1018,6 +1104,19 @@ def main():
         if s.get("type") == "section" or plan_by_n.get(s["n"], {}).get("layout") == "section":
             cur = s.get("title", "")
         b.section_of[s["n"]] = s.get("section") or cur
+    # a template page whose background differs from the content pages (a red cover, a dark
+    # closing page) is laid out with that layout's own palette
+    kstyles = {}
+    if tpl:
+        from common import Style
+        for kind, ent in tpl.get("kinds", {}).items():
+            if ent.get("palette") or "closing_dark" in ent:
+                d = json.loads(json.dumps(style.data))
+                if ent.get("palette"):
+                    d["palette"] = ent["palette"]
+                if "closing_dark" in ent:
+                    d.setdefault("decor", {})["closing_dark"] = ent["closing_dark"]
+                kstyles[kind] = Style(d)
     built = []
     for s in deck["slides"]:
         ps = plan_by_n.get(s["n"], {})
@@ -1030,6 +1129,15 @@ def main():
         L.step_reset()
         els, info = fn(s, ctx)
         L.step_end()
+        pstyle = style
+        if tpl:
+            tkind = template_kind(lname, info)
+            if tkind in kstyles:
+                pstyle = kstyles[tkind]
+                ctx = L.Ctx(pstyle, meta_ctx, assets, ps)
+                L.step_reset()
+                els, info = fn(s, ctx)
+                L.step_end()
         els = L.apply_markers(els, ctx, lname)
         # small pictures kept from the original at a fixed spot: logos, AI-generated labels
         for st in s.get("stamps", []):
@@ -1053,12 +1161,12 @@ def main():
             for e in els:
                 if e.get("t") == "text" and e.get("role") != "decor":
                     e["size"] = snap_size(e["size"])
-        built.append((s, ps, lname, info, els))
+        built.append((s, ps, lname, info, els, pstyle))
 
     # deck-wide groups ("dgrp", e.g. every slide title): the most common size wins, larger ones
     # shrink to it (shrinking always still fits), so titles do not change size from page to page
     groups = {}
-    for _, _, _, _, els in built:
+    for _, _, _, _, els, _ in built:
         for e in els:
             if e.get("t") == "text" and e.get("dgrp"):
                 groups.setdefault(e["dgrp"], []).append(e)
@@ -1069,28 +1177,50 @@ def main():
         for e in es:
             e["size"] = min(e["size"], target)
 
-    for s, ps, lname, info, els in built:
+    pages = []
+    for s, ps, lname, info, els, pstyle in built:
+        b.S = pstyle
         chrome = b.chrome(s, info, ps)
         for e in chrome:
             e.setdefault("role", "chrome")
         if any(e.get("brand_header") for e in chrome) and not (s.get("section") or b.section_of.get(s["n"])):
             els = [e for e in els if e.get("grp") != "kicker"]  # the kicker went up into the header
-        all_els = b.master(s, info, ps) + els + chrome
+        # on a company template the template's own master is the background
+        all_els = ([] if tpl else b.master(s, info, ps)) + els + chrome
         if style.brand:
             all_els += place_logo(style, s, info.get("master", "content"), all_els)
+        pages.append((s, ps, lname, info, all_els, pstyle))
+    b.S = style
+    frames = template_frames(tpl, pages, sw / 914400, sh / 914400) if tpl else {}
+
+    for s, ps, lname, info, all_els, pstyle in pages:
+        b.S = pstyle
         pill = bool(s.get("takeaway") and not info.get("uses_takeaway"))
         # content must end above the takeaway pill, the source line or the footer row
         rail = 6.25 if pill else (6.45 if ((s.get("source") or s.get("footnote")) and style.decor.get("chrome") != "editorial") else 6.8)
-        slide = prs.slides.add_slide(blank)
+        if tpl:
+            tkind = template_kind(lname, info)
+            k_, ox_, oy_ = frames[tkind]
+            b.frame(k_, ox_, oy_)
+            slide = prs.slides.add_slide(prs.slide_layouts[tpl["kinds"][tkind]["index"]])
+            for ph in list(slide.placeholders):  # the layout's empty "click to add title" boxes
+                ph._element.getparent().remove(ph._element)
+        else:
+            slide = prs.slides.add_slide(blank)
         rendered = b.render(slide, all_els)
         mode, effect = A.resolve(deck.get("meta", {}), s)
         builds = A.apply(slide, rendered, mode, effect)
         notes = s.get("notes")
         if notes:
             slide.notes_slide.notes_text_frame.text = notes
-        dump["slides"].append({"n": s["n"], "layout": lname, "master": info.get("master", "content"),
-                               "rail": rail, "animation": {"mode": mode, "builds": builds},
-                               "empty_free": bool(info.get("empty")), "elements": all_els})
+        entry = {"n": s["n"], "layout": lname, "master": info.get("master", "content"),
+                 "rail": rail, "animation": {"mode": mode, "builds": builds},
+                 "empty_free": bool(info.get("empty")), "elements": all_els}
+        if tpl:
+            entry["template"] = {"kind": tkind, "frame": [b.k, b.ox, b.oy], "layout_index": tpl["kinds"][tkind]["index"],
+                                 "palette": pstyle.data.get("palette", {}), "decor": pstyle.data.get("decor", {})}
+        dump["slides"].append(entry)
+    b.S = style
     out = Path(a.out) if a.out else work / "out" / "beautified.pptx"
     out.parent.mkdir(parents=True, exist_ok=True)
     prs.save(str(out))
